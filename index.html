@@ -275,6 +275,9 @@
                 <button onclick="switchView('timeline')" id="btn-view-timeline" class="px-2.5 sm:px-3.5 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-[11px] sm:text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 hover:bg-leather/80 whitespace-nowrap flex-1 sm:flex-initial">
                     <i class="fa-solid fa-timeline"></i> Chronologie
                 </button>
+                <button onclick="syncWithCloud(true)" title="Synchroniser maintenant" aria-label="Synchroniser" class="w-9 h-9 sm:w-10 sm:h-10 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-xl shadow-lg transition-all flex items-center justify-center hover:bg-leather/80 flex-shrink-0">
+                    <i id="sync-icon" class="fa-solid fa-cloud-arrow-up text-sm sm:text-base"></i>
+                </button>
                 <button onclick="toggleSpotifyDrawer()" title="Ouvrir la playlist Spotify" class="w-9 h-9 sm:w-10 sm:h-10 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-xl shadow-lg transition-all flex items-center justify-center hover:bg-leather/80 flex-shrink-0">
                     <i class="fa-brands fa-spotify text-sm sm:text-base"></i>
                 </button>
@@ -744,7 +747,7 @@
                         <img id="modal-cover" src="" alt="Couverture" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/400x600/4a2511/d4af37?text=Couverture+Introuvable'">
                     </div>
                     <div id="modal-read-btn-wrapper" class="w-full flex flex-col gap-2">
-                        <button onclick="launchReader()" class="w-full py-3.5 px-6 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-parchment font-cinzel font-bold text-sm sm:text-base rounded-xl shadow-xl border-2 border-goldLeaf flex items-center justify-center gap-3 transition-transform active:scale-[0.99]">
+                        <button id="modal-read-btn" onclick="launchReader()" class="w-full py-3.5 px-6 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-parchment font-cinzel font-bold text-sm sm:text-base rounded-xl shadow-xl border-2 border-goldLeaf flex items-center justify-center gap-3 transition-transform active:scale-[0.99]">
                             <i class="fa-solid fa-book-open-reader text-goldLeaf text-lg sm:text-xl"></i> <span id="modal-read-btn-text">Commencer la lecture</span>
                         </button>
                     </div>
@@ -826,6 +829,7 @@
     <script>
         const SUPABASE_URL = 'https://fvmqclyjtbtyyjedbtnx.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_iIwibD2KMCmVBKEXTCvJ_Q_5RIzYN5f';
+        const EPUB_BUCKET = 'epubs';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const db = new Dexie('GrimoiresChroniclesDB');
@@ -866,9 +870,62 @@
 
         const isDesktopReaderSpread = () => window.innerWidth >= 768;
         const getPagesPerStep = () => (isDesktopReaderSpread() ? 2 : 1);
-        const hasEpubFormat = (book) => Boolean(book && (book.isEpub === true || book.fileBlob));
+        const hasEpubFormat = (book) => Boolean(book && (book.isEpub === true || book.fileBlob || book.epubPath));
         const getProfileStorageKey = () => currentUser ? `grimoires_profile_${currentUser.id}` : 'grimoires_profile_guest';
         const getHiddenNextReadsKey = () => currentUser ? `grimoires_hidden_next_reads_${currentUser.id}` : 'grimoires_hidden_next_reads_guest';
+
+        function buildStorageEpubPath(bookId) {
+            return currentUser ? `${currentUser.id}/${bookId}.epub` : null;
+        }
+
+        async function uploadEpubBlobToCloud(book) {
+            if (!currentUser || !book?.fileBlob) return book?.epubPath || null;
+            const path = book.epubPath || buildStorageEpubPath(book.id);
+            try {
+                const { error } = await supabaseClient.storage
+                    .from(EPUB_BUCKET)
+                    .upload(path, book.fileBlob, {
+                        contentType: 'application/epub+zip',
+                        upsert: true
+                    });
+                if (error) {
+                    console.error("Erreur envoi EPUB Storage:", error);
+                    return book.epubPath || null;
+                }
+                book.epubPath = path;
+                return path;
+            } catch (err) {
+                console.error("Exception envoi EPUB Storage:", err);
+                return book.epubPath || null;
+            }
+        }
+
+        async function downloadEpubBlobFromCloud(book) {
+            if (!currentUser || !book) return null;
+            const candidatePaths = [
+                book.epubPath,
+                buildStorageEpubPath(book.id)
+            ].filter(Boolean);
+
+            for (const path of [...new Set(candidatePaths)]) {
+                try {
+                    const { data, error } = await supabaseClient.storage
+                        .from(EPUB_BUCKET)
+                        .download(path);
+                    if (!error && data) {
+                        const arrayBuffer = await data.arrayBuffer();
+                        book.fileBlob = arrayBuffer;
+                        book.epubPath = path;
+                        book.isEpub = true;
+                        await saveLocalBook(book);
+                        return arrayBuffer;
+                    }
+                } catch (err) {
+                    console.error("Erreur téléchargement EPUB Storage:", err);
+                }
+            }
+            return null;
+        }
 
         function normalizeNextReadIds(list) {
             if (!Array.isArray(list)) return [];
@@ -974,12 +1031,13 @@
             if (userProfile.sortMode === 'manual') {
                 syncManualOrderWithBooks();
             }
-            localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+            await saveUserProfile();
             await renderLibrary();
         }
 
         function loadUserProfile() {
             const fallbackName = currentUser?.email ? currentUser.email.split('@')[0] : 'Lecteur';
+            const meta = currentUser?.user_metadata || {};
             let parsed = {};
             try {
                 parsed = JSON.parse(localStorage.getItem(getProfileStorageKey()) || '{}');
@@ -987,17 +1045,21 @@
                 parsed = {};
             }
             userProfile = {
-                displayName: parsed.displayName || fallbackName,
-                title: parsed.title || 'Voyageur des mondes',
-                favoriteGenres: parsed.favoriteGenres || '',
-                bio: parsed.bio || '',
+                displayName: parsed.displayName || meta.display_name || fallbackName,
+                title: parsed.title || meta.reader_title || 'Voyageur des mondes',
+                favoriteGenres: parsed.favoriteGenres || meta.favorite_genres || '',
+                bio: parsed.bio || meta.bio || '',
                 avatar: parsed.avatar || '',
                 banner: parsed.banner || '',
                 pageBg: parsed.pageBg || '',
                 nextReadIds: loadHiddenNextReads(),
-                journalPosts: Array.isArray(parsed.journalPosts) ? parsed.journalPosts : [],
-                sortMode: parsed.sortMode || 'title',
-                manualBookOrder: Array.isArray(parsed.manualBookOrder) ? parsed.manualBookOrder : []
+                journalPosts: Array.isArray(parsed.journalPosts) && parsed.journalPosts.length > 0
+                    ? parsed.journalPosts
+                    : (Array.isArray(meta.journal_posts) ? meta.journal_posts : []),
+                sortMode: parsed.sortMode || meta.sort_mode || 'title',
+                manualBookOrder: Array.isArray(parsed.manualBookOrder) && parsed.manualBookOrder.length > 0
+                    ? parsed.manualBookOrder
+                    : (Array.isArray(meta.manual_book_order) ? meta.manual_book_order : [])
             };
             persistHiddenNextReads(userProfile.nextReadIds);
             const sortSelect = document.getElementById('sort-select');
@@ -1025,7 +1087,10 @@
                     reader_title: userProfile.title,
                     favorite_genres: userProfile.favoriteGenres,
                     bio: userProfile.bio,
-                    next_read_ids: userProfile.nextReadIds
+                    next_read_ids: userProfile.nextReadIds,
+                    journal_posts: (userProfile.journalPosts || []).slice(0, 60),
+                    sort_mode: userProfile.sortMode,
+                    manual_book_order: userProfile.manualBookOrder
                 }
             }).catch(() => {});
         }
@@ -1624,7 +1689,7 @@
                 localStorage.setItem(getHiddenNextReadsKey(), JSON.stringify(initialNextReads));
             }
 
-            if (meta && !localStorage.getItem(getProfileStorageKey()) && (meta.display_name || meta.reader_title || meta.next_read_ids)) {
+            if (meta && !localStorage.getItem(getProfileStorageKey()) && (meta.display_name || meta.reader_title || meta.next_read_ids || meta.journal_posts)) {
                 localStorage.setItem(getProfileStorageKey(), JSON.stringify({
                     displayName: meta.display_name || currentUser.email.split('@')[0],
                     title: meta.reader_title || 'Voyageur des mondes',
@@ -1634,15 +1699,15 @@
                     banner: '',
                     pageBg: '',
                     nextReadIds: initialNextReads,
-                    journalPosts: [],
-                    sortMode: 'title',
-                    manualBookOrder: []
+                    journalPosts: Array.isArray(meta.journal_posts) ? meta.journal_posts : [],
+                    sortMode: meta.sort_mode || 'title',
+                    manualBookOrder: Array.isArray(meta.manual_book_order) ? meta.manual_book_order : []
                 }));
             }
 
             loadUserProfile();
             showAuthStatus("Authentification réussie ! Chargement de votre bibliothèque...", 'success');
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 400));
 
             authScreen.classList.add('hidden');
             hideAuthStatus();
@@ -1676,7 +1741,10 @@
 
         async function pushBookToCloud(book) {
             if (!currentUser) return;
-            const { error } = await supabaseClient.from('books').upsert({
+            if (book.fileBlob && !book.epubPath) {
+                await uploadEpubBlobToCloud(book);
+            }
+            const payload = {
                 id: book.id,
                 user_id: currentUser.id,
                 title: book.title,
@@ -1691,9 +1759,17 @@
                 end_date: book.endDate || "",
                 comment: book.comment || "",
                 is_epub: Boolean(hasEpubFormat(book)),
+                epub_path: book.epubPath || null,
                 saved_spread_index: book.savedSpreadIndex || 0,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
+            };
+
+            let { error } = await supabaseClient.from('books').upsert(payload, { onConflict: 'id' });
+            if (error && String(error.message || '').includes('epub_path')) {
+                delete payload.epub_path;
+                const retry = await supabaseClient.from('books').upsert(payload, { onConflict: 'id' });
+                error = retry.error;
+            }
             if (error) console.error("Erreur sauvegarde auto cloud:", error);
         }
 
@@ -1704,63 +1780,81 @@
 
         async function syncWithCloud(showFeedback = false) {
             if (!currentUser) return;
-            const { data: remoteRows, error } = await supabaseClient.from('books').select('*').eq('user_id', currentUser.id);
-            if (error) {
-                console.error("Erreur lecture cloud:", error);
-                return;
+            const syncIcon = document.getElementById('sync-icon');
+            if (syncIcon) syncIcon.classList.add('fa-spin');
+
+            try {
+                const { data: remoteRows, error } = await supabaseClient.from('books').select('*').eq('user_id', currentUser.id);
+                if (error) {
+                    console.error("Erreur lecture cloud:", error);
+                    if (showFeedback) showToast("Erreur de synchronisation cloud.");
+                    return;
+                }
+
+                const localById = new Map(books.map(b => [b.id, b]));
+                const merged = [];
+
+                for (const row of (remoteRows || [])) {
+                    const local = localById.get(row.id);
+                    const epubPath = row.epub_path || local?.epubPath || (row.is_epub ? buildStorageEpubPath(row.id) : null);
+                    const mergedBook = {
+                        id: row.id,
+                        userId: currentUser.id,
+                        title: row.title,
+                        author: row.author || "Auteur Inconnu",
+                        genre: row.genre || "Fantasy",
+                        saga: row.saga || "",
+                        tome: row.tome || 1,
+                        isbn: row.isbn || "Non répertorié",
+                        cover: row.cover || DEFAULT_COVER,
+                        description: row.description || "",
+                        startDate: row.start_date || "",
+                        endDate: row.end_date || "",
+                        comment: row.comment || "",
+                        isEpub: Boolean(row.is_epub || local?.fileBlob || epubPath),
+                        epubPath,
+                        fileBlob: local?.fileBlob || null,
+                        savedSpreadIndex: row.saved_spread_index || 0,
+                        readCount: Number(local?.readCount) || 0,
+                        completionCount: Number(local?.completionCount) || (row.end_date ? 1 : 0),
+                        isRereading: Boolean(local?.isRereading),
+                        addedAt: local?.addedAt || row.created_at || row.updated_at || new Date(Number(row.id) || Date.now()).toISOString()
+                    };
+
+                    if (mergedBook.fileBlob && !row.epub_path) {
+                        await uploadEpubBlobToCloud(mergedBook);
+                        await pushBookToCloud(mergedBook);
+                    }
+
+                    merged.push(mergedBook);
+                    localById.delete(row.id);
+                }
+
+                for (const localOnly of localById.values()) {
+                    const prepared = {
+                        ...localOnly,
+                        readCount: Number(localOnly.readCount) || 0,
+                        completionCount: Number(localOnly.completionCount) || (localOnly.endDate ? 1 : 0),
+                        isRereading: Boolean(localOnly.isRereading),
+                        addedAt: localOnly.addedAt || new Date(Number(localOnly.id) || Date.now()).toISOString()
+                    };
+                    await pushBookToCloud(prepared);
+                    merged.push(prepared);
+                }
+
+                await db.books.where('userId').equals(currentUser.id).delete();
+                if (merged.length > 0) await db.books.bulkPut(merged);
+                books = await db.books.where('userId').equals(currentUser.id).toArray();
+
+                renderAccountHeader();
+                renderProfilePage();
+                populateFilters();
+                renderLibrary();
+                renderTimeline();
+                if (showFeedback) showToast("Bibliothèque et EPUB synchronisés !");
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('fa-spin');
             }
-
-            const localById = new Map(books.map(b => [b.id, b]));
-            const merged = [];
-
-            for (const row of (remoteRows || [])) {
-                const local = localById.get(row.id);
-                merged.push({
-                    id: row.id,
-                    userId: currentUser.id,
-                    title: row.title,
-                    author: row.author || "Auteur Inconnu",
-                    genre: row.genre || "Fantasy",
-                    saga: row.saga || "",
-                    tome: row.tome || 1,
-                    isbn: row.isbn || "Non répertorié",
-                    cover: row.cover || DEFAULT_COVER,
-                    description: row.description || "",
-                    startDate: row.start_date || "",
-                    endDate: row.end_date || "",
-                    comment: row.comment || "",
-                    isEpub: Boolean(row.is_epub || local?.fileBlob),
-                    fileBlob: local?.fileBlob || null,
-                    savedSpreadIndex: row.saved_spread_index || 0,
-                    readCount: Number(local?.readCount) || 0,
-                    completionCount: Number(local?.completionCount) || (row.end_date ? 1 : 0),
-                    isRereading: Boolean(local?.isRereading),
-                    addedAt: local?.addedAt || row.created_at || row.updated_at || new Date(Number(row.id) || Date.now()).toISOString()
-                });
-                localById.delete(row.id);
-            }
-
-            for (const localOnly of localById.values()) {
-                merged.push({
-                    ...localOnly,
-                    readCount: Number(localOnly.readCount) || 0,
-                    completionCount: Number(localOnly.completionCount) || (localOnly.endDate ? 1 : 0),
-                    isRereading: Boolean(localOnly.isRereading),
-                    addedAt: localOnly.addedAt || new Date(Number(localOnly.id) || Date.now()).toISOString()
-                });
-                await pushBookToCloud(localOnly);
-            }
-
-            await db.books.where('userId').equals(currentUser.id).delete();
-            if (merged.length > 0) await db.books.bulkPut(merged);
-            books = await db.books.where('userId').equals(currentUser.id).toArray();
-
-            renderAccountHeader();
-            renderProfilePage();
-            populateFilters();
-            renderLibrary();
-            renderTimeline();
-            if (showFeedback) showToast("Bibliothèque sauvegardée.");
         }
 
         function openCreateBookModal() {
@@ -1814,6 +1908,7 @@
                 completionCount: Math.max(readCountVal, endDateVal ? 1 : 0),
                 isRereading: isRereadingVal,
                 isEpub: false,
+                epubPath: null,
                 fileBlob: null,
                 savedSpreadIndex: 0,
                 addedAt: new Date().toISOString()
@@ -1872,7 +1967,7 @@
             const files = event.target.files;
             if (!files?.length) return;
 
-            showToast(`Importation de ${files.length} EPUB(s)...`);
+            showToast(`Importation et sauvegarde cloud de ${files.length} EPUB(s)...`);
             const parser = new DOMParser();
 
             for (const file of files) {
@@ -1933,8 +2028,9 @@
                     }
 
                     const existingBook = books.find(b => b.title.toLowerCase() === title.toLowerCase() && b.author.toLowerCase() === author.toLowerCase());
-                    await autoSaveBook({
-                        id: existingBook ? existingBook.id : (Date.now() + Math.floor(Math.random() * 1000)),
+                    const bookId = existingBook ? existingBook.id : (Date.now() + Math.floor(Math.random() * 1000));
+                    const bookObj = {
+                        id: bookId,
                         userId: currentUser.id,
                         title,
                         author,
@@ -1951,10 +2047,14 @@
                         completionCount: existingBook?.completionCount || (existingBook?.endDate ? 1 : 0),
                         isRereading: existingBook?.isRereading || false,
                         isEpub: true,
+                        epubPath: existingBook?.epubPath || buildStorageEpubPath(bookId),
                         fileBlob: arrayBuffer,
                         savedSpreadIndex: existingBook?.savedSpreadIndex || 0,
                         addedAt: existingBook?.addedAt || new Date().toISOString()
-                    });
+                    };
+
+                    await uploadEpubBlobToCloud(bookObj);
+                    await autoSaveBook(bookObj);
                 } catch (err) {
                     console.error("Erreur d'importation EPUB:", err);
                 }
@@ -1963,7 +2063,7 @@
             populateFilters();
             renderLibrary();
             renderTimeline();
-            showToast("Grimoire importé et sauvegardé automatiquement !");
+            showToast("Grimoire importé et synchronisé dans le cloud !");
             event.target.value = '';
         }
 
@@ -2076,7 +2176,7 @@
                             const [moved] = order.splice(fromIdx, 1);
                             order.splice(toIdx, 0, moved);
                             userProfile.manualBookOrder = order;
-                            localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+                            await saveUserProfile();
                             await renderLibrary();
                             showToast("Ordre manuel enregistré !");
                         });
@@ -2222,6 +2322,10 @@
 
             await db.books.delete(book.id);
             await supabaseClient.from('books').delete().eq('id', book.id).eq('user_id', currentUser.id);
+            const storagePath = book.epubPath || buildStorageEpubPath(book.id);
+            if (storagePath) {
+                await supabaseClient.storage.from(EPUB_BUCKET).remove([storagePath]).catch(() => {});
+            }
             books = books.filter(b => b.id !== book.id);
             userProfile.manualBookOrder = (userProfile.manualBookOrder || []).filter(id => id !== book.id);
             const currentPal = normalizeNextReadIds(userProfile.nextReadIds);
@@ -2242,8 +2346,22 @@
         async function launchReader() {
             const book = books.find(b => b.id === currentSelectedBookId);
             if (!book || !hasEpubFormat(book)) return;
+
+            const readBtn = document.getElementById('modal-read-btn');
+            const readBtnText = document.getElementById('modal-read-btn-text');
+            const previousLabel = readBtnText ? readBtnText.textContent : '';
+
             if (!book.fileBlob) {
-                showToast("Fichier EPUB absent sur cet appareil : réimportez l'EPUB ici pour lire.");
+                if (readBtn) readBtn.disabled = true;
+                if (readBtnText) readBtnText.textContent = "Téléchargement de l'EPUB...";
+                showToast("Téléchargement du grimoire depuis le cloud...");
+                await downloadEpubBlobFromCloud(book);
+                if (readBtn) readBtn.disabled = false;
+                if (readBtnText) readBtnText.textContent = previousLabel;
+            }
+
+            if (!book.fileBlob) {
+                showToast("EPUB introuvable dans le cloud : réimportez-le une fois depuis votre ordinateur.");
                 return;
             }
 
