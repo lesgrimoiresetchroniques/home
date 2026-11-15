@@ -91,6 +91,11 @@
         .book-spine {
             writing-mode: vertical-rl;
             text-orientation: mixed;
+            overflow: hidden;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
             transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, opacity 0.2s ease;
             cursor: pointer;
             position: relative;
@@ -1594,10 +1599,36 @@
                 if (e.key === 'ArrowLeft') turnPage(-1);
             });
 
+            let isHandlingAuth = false;
+            let lastHandledUserId = null;
+
+            const runAuthSession = async (session) => {
+                if (isHandlingAuth) return;
+                const nextUserId = session?.user?.id || null;
+                if (nextUserId && nextUserId === lastHandledUserId && currentUser?.id === nextUserId) {
+                    return;
+                }
+                isHandlingAuth = true;
+                try {
+                    await handleSessionChange(session);
+                    lastHandledUserId = currentUser?.id || null;
+                } finally {
+                    isHandlingAuth = false;
+                }
+            };
+
             const { data: { session } } = await supabaseClient.auth.getSession();
-            await handleSessionChange(session);
-            supabaseClient.auth.onAuthStateChange(async (_event, newSession) => {
-                await handleSessionChange(newSession);
+            await runAuthSession(session);
+            supabaseClient.auth.onAuthStateChange(async (event, newSession) => {
+                if (event === 'SIGNED_OUT') {
+                    lastHandledUserId = null;
+                    await handleSessionChange(null);
+                    return;
+                }
+                if (event === 'TOKEN_REFRESHED' && newSession?.user?.id === currentUser?.id) {
+                    return;
+                }
+                await runAuthSession(newSession);
             });
         });
 
@@ -1721,6 +1752,11 @@
             currentUser = session ? session.user : null;
             const authScreen = document.getElementById('auth-screen');
             if (!currentUser) {
+                isSyncing = false;
+                const syncIconReset = document.getElementById('sync-icon');
+                const syncBtnReset = document.getElementById('sync-btn');
+                if (syncIconReset) syncIconReset.classList.remove('fa-spin');
+                if (syncBtnReset) syncBtnReset.disabled = false;
                 authScreen.classList.remove('hidden');
                 return;
             }
@@ -1846,14 +1882,25 @@
         async function fetchRemoteBooksInBatches() {
             const allRows = [];
             let from = 0;
+            const lightColumns = 'id,user_id,title,author,genre,saga,tome,isbn,cover,description,start_date,end_date,comment,is_epub,epub_path,saved_spread_index,created_at,updated_at';
 
             while (true) {
                 const to = from + SYNC_BATCH_SIZE - 1;
-                const { data, error } = await supabaseClient
+                let { data, error } = await supabaseClient
                     .from('books')
-                    .select('*')
+                    .select(lightColumns)
                     .eq('user_id', currentUser.id)
                     .range(from, to);
+
+                if (error) {
+                    const fallback = await supabaseClient
+                        .from('books')
+                        .select('*')
+                        .eq('user_id', currentUser.id)
+                        .range(from, to);
+                    data = fallback.data;
+                    error = fallback.error;
+                }
 
                 if (error) {
                     throw error;
@@ -1891,7 +1938,7 @@
                     remoteRows = await fetchRemoteBooksInBatches();
                 } catch (error) {
                     console.error("Erreur lecture cloud:", error);
-                    if (showFeedback) showToast("Erreur ou délai dépassé lors de la lecture cloud.");
+                    showToast(`Erreur lecture Supabase : ${error?.message || 'connexion ou RLS'}`);
                     return;
                 }
 
@@ -1964,9 +2011,15 @@
                     await sleep(BATCH_PAUSE_MS);
                 }
 
-                await db.books.where('userId').equals(currentUser.id).delete();
                 for (let i = 0; i < merged.length; i += SYNC_BATCH_SIZE) {
                     await db.books.bulkPut(merged.slice(i, i + SYNC_BATCH_SIZE));
+                    await sleep(50);
+                }
+                const remoteIdsSet = new Set(merged.map(b => b.id));
+                const existingLocalAll = await db.books.where('userId').equals(currentUser.id).toArray();
+                const staleIds = existingLocalAll.filter(b => !remoteIdsSet.has(b.id)).map(b => b.id);
+                if (staleIds.length > 0) {
+                    await db.books.bulkDelete(staleIds);
                 }
                 books = await db.books.where('userId').equals(currentUser.id).toArray();
 
@@ -2247,9 +2300,9 @@
 
                     const spineTopLabel = book.saga ? `Tome ${book.tome || 1}` : (hasEpubFormat(book) ? 'Roman' : 'Journal');
                     spine.innerHTML = `
-                        <div class="text-[8.5px] sm:text-[9px] text-goldLeaf font-cinzel font-bold tracking-wider uppercase whitespace-nowrap text-center drop-shadow">${spineTopLabel}</div>
-                        <div class="text-[9px] sm:text-[9.5px] text-parchment font-cinzel font-bold tracking-wider w-full text-center my-auto px-0.5 drop-shadow" style="display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${escapeHtml(book.title)}</div>
-                        <div class="text-[7.5px] sm:text-[8px] text-parchment/90 font-lora truncate w-full text-center drop-shadow">${escapeHtml(book.author)}</div>
+                        <div class="text-[8.5px] sm:text-[9px] text-goldLeaf font-cinzel font-bold tracking-wider uppercase whitespace-nowrap text-center drop-shadow flex-shrink-0">${spineTopLabel}</div>
+                        <div class="text-[9.5px] sm:text-[10px] text-parchment font-cinzel font-bold tracking-wider text-center my-auto px-0.5 drop-shadow" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-block-size: 112px;">${escapeHtml(book.title)}</div>
+                        <div class="text-[7.5px] sm:text-[8px] text-parchment/90 font-lora text-center drop-shadow flex-shrink-0" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-block-size: 56px;">${escapeHtml(book.author)}</div>
                         <div class="hidden md:block absolute top-0 left-full ml-2 w-36 aspect-[2/3] bg-leatherDark rounded-xl shadow-2xl border-2 border-goldLeaf p-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 z-40">
                             <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-full h-full object-contain rounded-lg bg-black/40" onerror="this.src='https://placehold.co/300x450/4a2511/d4af37?text=Couverture'">
                         </div>
