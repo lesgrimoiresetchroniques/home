@@ -1,263 +1,680 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Les Grimoires et Chroniques • Édition Hiver</title>
-    <!-- Tailwind CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#22120a">
+    <title>Les Grimoires et Chroniques</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome pour les icônes -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts: Cinzel Decorative & Lora -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Lora:ital,wght@0,400..700;1,400..700&family=MedievalSharp&display=swap" rel="stylesheet">
-    <!-- JSZip pour la lecture directe des fichiers EPUB -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Lora:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- Dexie.js pour IndexedDB (Stockage illimité des couvertures) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        leather: '#331a1a',       /* Brun/Rouge chaud cocooning */
-                        leatherDark: '#1c0f0f',   /* Fond sombre feutré */
-                        parchment: '#fcf8ec',
-                        parchmentDark: '#ebdcc0',
-                        goldLeaf: '#dfbc48',
-                        goldDark: '#a68529',
-                        crimson: '#7a1f1f',       /* Rouge Noël velouté */
-                        pineGreen: '#1b3b2b'
+                        leather: '#3d2314',
+                        leatherDark: '#22120a',
+                        parchment: '#f4ebd0',
+                        goldLeaf: '#d4af37',
+                        goldDark: '#997a15',
+                        crimson: '#6b1d1d'
                     },
                     fontFamily: {
                         cinzel: ['"Cinzel Decorative"', 'serif'],
-                        lora: ['Lora', 'serif'],
-                        medieval: ['MedievalSharp', 'cursive']
+                        lora: ['Lora', 'serif']
                     }
                 }
             }
         }
     </script>
     <style>
+        html, body {
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-text-size-adjust: 100%;
+        }
         body {
-            background-color: #121a16;
-            color: #fcf8ec;
+            background-color: #1a0f08;
+            color: #f4ebd0;
             font-family: 'Lora', serif;
-            background-image: radial-gradient(circle at 50% 20%, #1f2f25 0%, #0d1411 100%);
+            background-image: radial-gradient(circle, #2d190e 0%, #110804 100%);
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            transition: background-image 0.35s ease, background-color 0.35s ease;
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+        }
+        .safe-top {
+            padding-top: calc(0.75rem + env(safe-area-inset-top));
+        }
+        .safe-bottom {
+            padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
         }
         .wood-shelf {
             background: linear-gradient(to bottom, #4a2c11 0%, #321c0b 100%);
             box-shadow: 0 10px 25px rgba(0,0,0,0.8), inset 0 2px 5px rgba(255,255,255,0.15), inset 0 -4px 6px rgba(0,0,0,0.6);
             border-bottom: 6px solid #1a0d05;
             border-radius: 4px;
-            position: relative;
         }
-        /* Guirlande lumineuse de Noël cocooning sur l'étagère */
-        .christmas-garland {
-            position: absolute;
-            top: -6px;
-            left: 0;
-            right: 0;
-            height: 8px;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            pointer-events: none;
-            z-index: 20;
-            padding: 0 10px;
-        }
-        .garland-bulb {
-            width: 7px;
-            height: 9px;
-            border-radius: 50% 50% 40% 40%;
-            box-shadow: 0 0 6px currentColor;
-            animation: twinkle 1.8s infinite alternate ease-in-out;
-        }
-        .bulb-red { background-color: #ff4d4d; color: #ff4d4d; animation-delay: 0.2s; }
-        .bulb-gold { background-color: #ffe066; color: #ffe066; animation-delay: 0.6s; }
-        .bulb-green { background-color: #40bf73; color: #40bf73; animation-delay: 1s; }
-        .bulb-blue { background-color: #59b3ff; color: #59b3ff; animation-delay: 0.4s; }
-
-        @keyframes twinkle {
-            0% { opacity: 0.3; transform: scale(0.7); }
-            100% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 10px currentColor; }
-        }
-
         .grimoire-page {
             transition: background-color 0.4s ease, background-image 0.4s ease;
-            color: #fcf8ec;
+            color: #f4ebd0;
         }
         .shelf-row {
             display: flex;
             align-items: flex-end;
             justify-content: flex-start;
-            gap: 12px;
-            padding: 24px 24px 8px 24px;
-            min-height: 220px;
+            gap: 10px;
+            padding: 20px 16px 6px 16px;
+            min-height: 205px;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
             flex-nowrap: nowrap;
+        }
+        @media (min-width: 768px) {
+            .shelf-row {
+                gap: 12px;
+                padding: 24px 24px 8px 24px;
+                min-height: 220px;
+            }
         }
         .book-spine {
             writing-mode: vertical-rl;
             text-orientation: mixed;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, opacity 0.2s ease;
             cursor: pointer;
             position: relative;
             user-select: none;
+            -webkit-user-select: none;
             z-index: 10;
             flex-shrink: 0;
         }
-        .book-spine.shift-right {
-            transform: translateX(150px);
+        .book-spine.manual-draggable { cursor: grab; }
+        .book-spine.manual-draggable:active { cursor: grabbing; }
+        .book-spine.dragging { opacity: 0.45; transform: scale(0.96); }
+        .book-spine.drag-target { outline: 2px dashed #d4af37; outline-offset: 3px; }
+        .book-spine.shift-right { transform: translateX(140px); }
+        .book-spine.is-hovered { z-index: 50; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        #spotify-drawer, #toc-drawer { transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+        #spotify-drawer.closed { transform: translateX(100%); }
+        #toc-drawer.closed { transform: translateX(-100%); }
+
+        .book-spread {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            gap: 1rem;
+            box-sizing: border-box;
         }
-        .book-spine.is-hovered {
-            z-index: 50;
+        @media (min-width: 768px) {
+            .book-spread {
+                flex-direction: row;
+                gap: 2.5rem;
+            }
         }
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
+        .page-half, #calc-sandbox {
+            flex: 1;
+            height: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+            color: #22120a;
+            font-family: 'Lora', serif;
+            font-size: 0.92rem;
+            line-height: 1.52;
+            text-align: left;
         }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
+        @media (min-width: 768px) {
+            .page-half, #calc-sandbox {
+                font-size: 0.95rem;
+                line-height: 1.55;
+            }
+            .page-left { padding-right: 1.25rem; }
+            .page-right { padding-left: 1.25rem; }
         }
-        /* Panneau latéral Spotify ancré à droite sur toute la hauteur */
-        #spotify-drawer {
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        .page-blank {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            opacity: 0.25;
+            font-style: italic;
+            font-size: 0.85rem;
         }
-        #spotify-drawer.closed {
-            transform: translateX(100%);
+        .page-half p, #calc-sandbox p {
+            margin-bottom: 0.7rem;
+            text-indent: 0.85rem;
+        }
+        .page-half h1, .page-half h2, .page-half h3,
+        #calc-sandbox h1, #calc-sandbox h2, #calc-sandbox h3 {
+            font-family: 'Cinzel Decorative', serif;
+            color: #3d2314;
+            margin: 0.7rem 0;
+            font-weight: 700;
+            text-align: left;
+            text-indent: 0;
+        }
+        .page-half img, #calc-sandbox img,
+        .page-half svg, #calc-sandbox svg {
+            max-width: 92%;
+            max-height: 40vh;
+            object-fit: contain;
+            margin: 0.65rem auto;
+            display: block;
         }
     </style>
 </head>
-<body class="h-full flex flex-col min-h-screen">
+<body class="flex flex-col min-h-[100dvh]">
 
-    <!-- PANNEAU LATÉRAL SPOTIFY (Droite - Pleine Hauteur) -->
-    <div id="spotify-drawer" class="closed fixed top-0 right-0 h-screen w-80 bg-leatherDark/95 border-l-2 border-goldLeaf/40 shadow-2xl z-50 flex flex-col backdrop-blur-md p-4">
-        <div class="flex items-center justify-between pb-4 border-b border-goldLeaf/30 mb-4 flex-shrink-0">
+    <!-- ÉCRAN DE CONNEXION -->
+    <div id="auth-screen" class="fixed inset-0 z-[90] bg-[#140b06] flex items-center justify-center p-4 overflow-y-auto">
+        <div class="w-full max-w-md bg-leatherDark/95 border-2 border-goldLeaf rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-5 my-auto">
+            <div class="text-center flex flex-col items-center gap-2">
+                <i class="fa-solid fa-book-skull text-goldLeaf text-4xl"></i>
+                <h2 class="text-xl sm:text-2xl font-cinzel font-bold text-goldLeaf">Les Grimoires et Chroniques</h2>
+                <p id="auth-subtitle" class="text-xs text-parchment/70 italic">Connectez-vous pour synchroniser votre bibliothèque</p>
+            </div>
+
+            <div id="auth-status-banner" class="hidden rounded-2xl p-3.5 text-xs font-lora border flex items-start gap-2.5"></div>
+
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="flex flex-col gap-3.5 text-sm">
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Adresse email</label>
+                    <input type="email" id="auth-email" required autocomplete="email" inputmode="email" placeholder="vous@exemple.com" class="bg-leather text-parchment px-3.5 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Mot de passe</label>
+                        <button type="button" onclick="handleForgotPassword()" class="text-[11px] text-goldLeaf/80 hover:text-goldLeaf hover:underline font-lora">
+                            Mot de passe oublié ?
+                        </button>
+                    </div>
+                    <div class="relative flex items-center">
+                        <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" placeholder="••••••••" class="w-full bg-leather text-parchment pl-3.5 pr-10 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                        <button type="button" onclick="togglePasswordVisibility()" aria-label="Afficher ou masquer le mot de passe" class="absolute right-3 text-goldLeaf/75 hover:text-goldLeaf transition-colors p-1">
+                            <i id="password-eye-icon" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <p id="auth-error" class="text-xs text-red-400 hidden"></p>
+                <button type="submit" id="auth-submit-btn" class="w-full py-3 mt-1 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:opacity-95 transition-all">
+                    Se connecter
+                </button>
+            </form>
+
+            <div class="text-center border-t border-goldLeaf/20 pt-4">
+                <button type="button" onclick="toggleAuthMode()" id="auth-toggle-btn" class="text-xs text-goldLeaf/90 hover:underline font-lora">
+                    Pas encore de compte ? Créer un compte
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANNEAU SPOTIFY -->
+    <div id="spotify-drawer" class="closed fixed top-0 right-0 h-[100dvh] w-80 max-w-[88vw] bg-leatherDark/95 border-l-2 border-goldLeaf/40 shadow-2xl z-50 flex flex-col backdrop-blur-md p-4 safe-top safe-bottom">
+        <div class="flex items-center justify-between pb-3 border-b border-goldLeaf/30 mb-3 flex-shrink-0">
             <div class="flex items-center gap-2 text-goldLeaf font-cinzel font-bold text-sm">
-                <i class="fa-brands fa-spotify text-lg text-goldLeaf"></i> Ambiance de Fêtes
+                <i class="fa-brands fa-spotify text-lg"></i> Ambiance Sonore
             </div>
             <button onclick="toggleSpotifyDrawer()" class="w-8 h-8 rounded-full bg-leather text-goldLeaf hover:bg-goldLeaf hover:text-leatherDark flex items-center justify-center transition-colors border border-goldLeaf/40 text-sm">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
-
-        <!-- Lecteur Intégré (Hauteur 650px) -->
-        <div class="flex-grow flex flex-col justify-center hidden md:flex my-auto">
-            <iframe style="border-radius:12px" src="https://open.spotify.com/embed/playlist/2Y73njm5d4enXmGuuZokdl?utm_source=generator&theme=0" width="100%" height="650" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+        <div class="flex-grow flex flex-col justify-center my-auto min-h-0">
+            <iframe style="border-radius:12px" src="https://open.spotify.com/embed/playlist/2Y73njm5d4enXmGuuZokdl?utm_source=generator&theme=0" width="100%" height="100%" class="max-h-[620px]" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
         </div>
-
-        <!-- Bouton d'ouverture directe -->
-        <div class="mt-auto pt-4 border-t border-goldLeaf/30 flex flex-col gap-2 flex-shrink-0">
-            <a href="https://open.spotify.com/playlist/2Y73njm5d4enXmGuuZokdl" target="_blank" class="w-full py-3 bg-leather hover:bg-leatherDark text-goldLeaf font-cinzel font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all border border-goldLeaf/40">
+        <div class="mt-3 pt-3 border-t border-goldLeaf/30 flex-shrink-0">
+            <a href="https://open.spotify.com/playlist/2Y73njm5d4enXmGuuZokdl" target="_blank" rel="noopener noreferrer" class="w-full py-3 bg-leather hover:bg-leatherDark text-goldLeaf font-cinzel font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all border border-goldLeaf/40">
                 <i class="fa-brands fa-spotify text-base"></i> Ouvrir dans l'app Spotify
             </a>
         </div>
     </div>
 
-    <!-- En-tête Magique Noël Cocooning -->
-    <header class="bg-leatherDark/95 border-b-2 border-crimson/50 py-6 px-4 md:px-12 sticky top-0 z-40 backdrop-blur-md shadow-2xl">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <i class="fa-solid fa-mug-hot text-goldLeaf text-3xl md:text-4xl"></i>
-                <div>
-                    <h1 class="text-2xl md:text-4xl font-cinzel font-bold text-goldLeaf tracking-wider">Les Grimoires et Chroniques</h1>
-                    <p class="text-xs md:text-sm font-lora text-parchment/70 italic"><i class="fa-solid fa-snowflake text-blue-200 mr-1"></i> Bibliothèque Édition Spéciale Hiver</p>
+    <!-- PANNEAU SOMMAIRE -->
+    <div id="toc-drawer" class="closed fixed top-0 left-0 h-[100dvh] w-80 max-w-[85vw] bg-leatherDark border-r-2 border-goldLeaf shadow-2xl z-[60] flex flex-col p-4 safe-top safe-bottom">
+        <div class="flex items-center justify-between pb-3 border-b border-goldLeaf/30 mb-3 flex-shrink-0">
+            <div class="flex items-center gap-2 text-goldLeaf font-cinzel font-bold text-sm">
+                <i class="fa-solid fa-list-ul text-lg"></i> Sommaire du Grimoire
+            </div>
+            <button onclick="toggleTocDrawer()" class="w-8 h-8 rounded-full bg-leather text-goldLeaf hover:bg-goldLeaf hover:text-leatherDark flex items-center justify-center transition-colors border border-goldLeaf/40 text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div id="toc-list" class="flex-grow overflow-y-auto no-scrollbar flex flex-col gap-2.5 pr-1"></div>
+    </div>
+
+    <!-- EN-TÊTE -->
+    <header class="bg-leatherDark/90 border-b-2 border-goldLeaf/40 pb-3.5 px-3.5 md:px-8 safe-top sticky top-0 z-40 backdrop-blur-md shadow-2xl">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-2.5 lg:gap-4">
+            <div class="flex items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-start">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <i class="fa-solid fa-book-skull text-goldLeaf text-2xl md:text-4xl flex-shrink-0"></i>
+                    <div class="min-w-0">
+                        <h1 class="text-base sm:text-xl md:text-3xl font-cinzel font-bold text-goldLeaf tracking-wider truncate">Les Grimoires et Chroniques</h1>
+                        <p id="user-session-label" class="hidden sm:block text-xs font-lora text-parchment/70 italic truncate">Votre bibliothèque fantastique personnelle</p>
+                    </div>
                 </div>
             </div>
-
-            <div class="flex items-center gap-3">
-                <button onclick="switchView('library')" id="btn-view-library" class="px-4 py-2 bg-crimson text-parchment font-cinzel font-bold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 border border-goldLeaf/40">
+            <div class="flex flex-nowrap items-center justify-between sm:justify-center gap-1.5 sm:gap-2 w-full lg:w-auto">
+                <button onclick="switchView('library')" id="btn-view-library" class="px-2.5 sm:px-3.5 py-2 bg-goldLeaf text-leatherDark font-cinzel font-bold text-[11px] sm:text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap flex-1 sm:flex-initial">
                     <i class="fa-solid fa-book-bookmark"></i> Bibliothèque
                 </button>
-                <button onclick="switchView('timeline')" id="btn-view-timeline" class="px-4 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 hover:bg-leather/80">
+                <button onclick="switchView('timeline')" id="btn-view-timeline" class="px-2.5 sm:px-3.5 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-[11px] sm:text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 hover:bg-leather/80 whitespace-nowrap flex-1 sm:flex-initial">
                     <i class="fa-solid fa-timeline"></i> Chronologie
                 </button>
-                <!-- Bouton Spotify épuré (icône seule encadrée) -->
-                <button onclick="toggleSpotifyDrawer()" title="Ouvrir la playlist Spotify" class="w-10 h-10 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-xl shadow-lg transition-all flex items-center justify-center hover:bg-leather/80">
-                    <i class="fa-brands fa-spotify text-base"></i>
+                <button onclick="toggleSpotifyDrawer()" title="Ouvrir la playlist Spotify" class="w-9 h-9 sm:w-10 sm:h-10 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-xl shadow-lg transition-all flex items-center justify-center hover:bg-leather/80 flex-shrink-0">
+                    <i class="fa-brands fa-spotify text-sm sm:text-base"></i>
                 </button>
+
+                <div class="relative flex-shrink-0" id="account-menu-wrapper">
+                    <button type="button" onclick="toggleAccountMenu(event)" title="Compte" aria-label="Compte" id="header-account-btn" class="w-9 h-9 sm:w-10 sm:h-10 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-full shadow-lg transition-all flex items-center justify-center hover:bg-leather/80 overflow-hidden">
+                        <span id="header-account-badge" class="w-full h-full flex items-center justify-center text-sm">
+                            <i class="fa-solid fa-user"></i>
+                        </span>
+                    </button>
+
+                    <div id="account-dropdown" class="hidden fixed sm:absolute right-3.5 sm:right-0 mt-2 w-60 bg-leatherDark border-2 border-goldLeaf rounded-2xl shadow-2xl z-[110] py-2 flex flex-col text-xs">
+                        <button type="button" onclick="switchView('profile'); closeAccountMenu();" class="px-4 py-3 text-left font-cinzel font-bold text-parchment hover:bg-goldLeaf hover:text-leatherDark transition-colors flex items-center gap-2.5">
+                            <i class="fa-solid fa-id-card w-4 text-center"></i> Profil
+                        </button>
+                        <button type="button" onclick="openNextReadsModal(); closeAccountMenu();" class="px-4 py-3 text-left font-cinzel font-bold text-parchment hover:bg-goldLeaf hover:text-leatherDark transition-colors flex items-center justify-between">
+                            <span class="flex items-center gap-2.5"><i class="fa-solid fa-bookmark w-4 text-center"></i> Prochaine lecture</span>
+                            <span id="pal-count-badge" class="px-2 py-0.5 rounded-full bg-leather text-goldLeaf border border-goldLeaf/40 text-[10px] font-mono">0</span>
+                        </button>
+                        <div class="border-t border-goldLeaf/20 mt-1 pt-1">
+                            <button type="button" onclick="signOutUser(); closeAccountMenu();" class="w-full px-4 py-3 text-left font-cinzel font-bold text-parchment/85 hover:bg-crimson hover:text-white transition-colors flex items-center gap-2.5">
+                                <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Déconnexion
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </header>
 
-    <!-- Contenu Principal -->
-    <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-8 flex flex-col gap-8">
-
-        <!-- Barre de Recherche et Filtres -->
-        <section id="library-controls" class="flex flex-row items-center justify-between gap-4 bg-leather/70 backdrop-blur-md p-4 rounded-2xl border border-crimson/40 shadow-xl overflow-x-auto no-scrollbar whitespace-nowrap">
-            <!-- Recherche alignée à gauche -->
-            <div class="relative w-64 md:w-72 flex-shrink-0">
-                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-goldLeaf/70"></i>
-                <input type="text" id="search-input" oninput="filterBooks()" placeholder="Rechercher par titre, auteur..." class="w-full bg-leatherDark/90 text-parchment placeholder-parchment/50 pl-10 pr-4 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-sm shadow-inner font-lora">
+    <!-- CONTENU PRINCIPAL -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-3 sm:p-4 md:p-8 flex flex-col gap-6 md:gap-8">
+        <section id="library-controls" class="relative z-30 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 bg-leather/60 backdrop-blur-md px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl border border-goldLeaf/30 shadow-xl">
+            <div class="relative w-full lg:w-60 flex-shrink-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-goldLeaf/70 text-xs"></i>
+                <input type="text" id="search-input" oninput="filterBooks()" placeholder="Rechercher..." class="w-full bg-leatherDark/80 text-parchment placeholder-parchment/50 pl-8 pr-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs shadow-inner font-lora">
             </div>
+            <div class="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto overflow-x-auto no-scrollbar pb-0.5 lg:pb-0">
+                <div class="relative z-40 flex-shrink-0" id="import-menu-wrapper">
+                    <button type="button" onclick="toggleImportMenu(event)" class="px-2.5 sm:px-3 py-2 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-xs rounded-xl shadow hover:opacity-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
+                        <i class="fa-solid fa-file-arrow-up"></i> Importer <i class="fa-solid fa-chevron-down text-[9px]"></i>
+                    </button>
+                    <div id="import-dropdown" class="hidden fixed sm:absolute left-3.5 sm:left-auto lg:right-0 mt-2 w-56 bg-leatherDark border-2 border-goldLeaf rounded-xl shadow-2xl z-[100] flex flex-col py-1">
+                        <label class="cursor-pointer px-4 py-3 text-left text-xs font-cinzel font-bold text-parchment hover:bg-goldLeaf hover:text-leatherDark transition-colors flex items-center gap-2.5 border-b border-goldLeaf/20 rounded-t-lg">
+                            <i class="fa-solid fa-book"></i> Importer EPUB
+                            <input type="file" id="epub-file-input" accept=".epub" multiple onchange="handleEpubImports(event); closeImportMenu();" class="hidden">
+                        </label>
+                        <button type="button" onclick="openCreateBookModal(); closeImportMenu();" class="px-4 py-3 text-left text-xs font-cinzel font-bold text-goldLeaf hover:bg-goldLeaf hover:text-leatherDark transition-colors flex items-center gap-2.5 rounded-b-lg">
+                            <i class="fa-solid fa-feather-pointed"></i> Créer nouveau livre
+                        </button>
+                    </div>
+                </div>
 
-            <!-- Import et Filtres alignés à droite -->
-            <div class="flex items-center gap-3 flex-shrink-0">
-                <label class="cursor-pointer px-4 py-2.5 bg-gradient-to-r from-crimson via-red-700 to-crimson text-parchment font-cinzel font-bold text-xs rounded-xl shadow hover:opacity-95 transition-all flex items-center gap-2 border border-goldLeaf/40">
-                    <i class="fa-solid fa-gift text-sm text-goldLeaf"></i> Importer grimoire
-                    <input type="file" id="epub-file-input" accept=".epub" multiple onchange="handleEpubImports(event)" class="hidden">
-                </label>
-
-                <!-- Genres -->
-                <select id="genre-filter" onchange="filterBooks()" class="bg-leatherDark/90 text-parchment px-4 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-sm font-lora cursor-pointer max-w-[190px] truncate">
-                    <option value="">Tous les Genres</option>
+                <select id="sort-select" onchange="handleSortChange()" aria-label="Trier" class="bg-leatherDark/80 text-parchment px-2 sm:px-2.5 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs font-lora cursor-pointer flex-shrink-0">
+                    <option value="title">Trier</option>
+                    <option value="title">Titre</option>
+                    <option value="author">Auteur</option>
+                    <option value="added">Date d'ajout</option>
+                    <option value="manual">Manuel</option>
                 </select>
 
-                <!-- Sagas -->
-                <select id="saga-filter" onchange="filterBooks()" class="bg-leatherDark/90 text-parchment px-4 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-sm font-lora cursor-pointer max-w-[190px] truncate">
-                    <option value="">Toutes les Sagas</option>
+                <select id="genre-filter" onchange="filterBooks()" aria-label="Genre" class="bg-leatherDark/80 text-parchment px-2 sm:px-2.5 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs font-lora cursor-pointer max-w-[115px] sm:max-w-[140px] flex-shrink-0">
+                    <option value="">Genre</option>
                 </select>
 
-                <!-- Statuts -->
-                <select id="status-filter" onchange="filterBooks()" class="bg-leatherDark/90 text-parchment px-4 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-sm font-lora cursor-pointer">
-                    <option value="">Tous les Statuts</option>
+                <select id="saga-filter" onchange="filterBooks()" aria-label="Saga" class="bg-leatherDark/80 text-parchment px-2 sm:px-2.5 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs font-lora cursor-pointer max-w-[115px] sm:max-w-[140px] flex-shrink-0">
+                    <option value="">Saga</option>
+                </select>
+
+                <select id="status-filter" onchange="filterBooks()" aria-label="Statut" class="bg-leatherDark/80 text-parchment px-2 sm:px-2.5 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs font-lora cursor-pointer flex-shrink-0">
+                    <option value="">Statut</option>
                     <option value="reading">En cours</option>
+                    <option value="rereading">Relecture</option>
                     <option value="finished">Terminés</option>
                     <option value="unread">Non commencés</option>
                 </select>
             </div>
         </section>
 
-        <!-- VUE BIBLIOTHÈQUE -->
-        <section id="view-library" class="flex flex-col gap-10">
-            <div id="shelves-container" class="flex flex-col gap-8">
-                <!-- Rempli dynamiquement -->
-            </div>
+        <p id="manual-sort-hint" class="hidden text-xs text-goldLeaf/90 font-lora italic bg-leather/45 border border-goldLeaf/30 rounded-xl px-4 py-2 text-center">
+            <i class="fa-solid fa-hand-pointer mr-1.5"></i> Mode tri manuel actif : glissez-déposez un grimoire sur un autre pour réorganiser vos étagères.
+        </p>
+
+        <section id="view-library" class="relative z-10 flex flex-col gap-8 sm:gap-10">
+            <div id="shelves-container" class="flex flex-col gap-8"></div>
         </section>
 
-        <!-- VUE CHRONOLOGIE -->
-        <section id="view-timeline" class="hidden flex flex-col gap-6">
-            <div class="bg-leather/80 p-6 rounded-2xl border border-crimson/40 shadow-xl text-center">
-                <h2 class="text-2xl font-cinzel text-goldLeaf mb-2">Chronologie des Épopées d'Hiver</h2>
-                <p class="text-parchment/80 text-sm">Le voyage de vos lectures au coin du feu classé par date d'achèvement.</p>
+        <section id="view-timeline" class="relative z-10 hidden flex flex-col gap-6">
+            <div class="bg-leather/80 p-5 sm:p-6 rounded-2xl border border-goldLeaf/40 shadow-xl text-center">
+                <h2 class="text-xl sm:text-2xl font-cinzel text-goldLeaf mb-2">Chronologie des Épopées Terminées</h2>
+                <p class="text-parchment/80 text-xs sm:text-sm">Le voyage de vos lectures classé par date de fin d'achèvement.</p>
             </div>
-
-            <div id="timeline-container" class="relative border-l-4 border-crimson ml-4 md:ml-8 pl-6 md:pl-8 py-4 flex flex-col gap-8">
-                <!-- Rempli dynamiquement -->
-            </div>
+            <div id="timeline-container" class="relative border-l-4 border-goldLeaf ml-3 md:ml-8 pl-5 md:pl-8 py-4 flex flex-col gap-6 sm:gap-8"></div>
         </section>
 
-    </main>
+        <!-- PAGE PROFIL PERSONNALISABLE + JOURNAL DE BORD -->
+        <section id="view-profile" class="relative z-10 hidden flex flex-col gap-6">
+            <div class="bg-leatherDark/90 rounded-3xl border-2 border-goldLeaf/50 shadow-2xl overflow-visible backdrop-blur-md">
+                <div id="profile-banner-box" class="relative h-40 sm:h-44 md:h-60 w-full rounded-t-3xl bg-gradient-to-r from-[#3d2314] via-[#5a3319] to-[#22120a] bg-cover bg-center border-b-2 border-goldLeaf/40 z-10">
+                    <button type="button" onclick="openProfileModal()" class="absolute top-3 right-3 sm:top-4 sm:right-4 px-3 py-2 bg-leatherDark/85 hover:bg-goldLeaf text-goldLeaf hover:text-leatherDark border border-goldLeaf/60 rounded-xl font-cinzel font-bold text-[11px] sm:text-xs shadow-lg transition-all flex items-center gap-1.5 backdrop-blur-sm z-30">
+                        <i class="fa-solid fa-sliders"></i> Personnaliser
+                    </button>
+                </div>
 
-    <!-- MODAL DÉTAIL DU LIVRE -->
-    <div id="book-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-2 md:p-6 overflow-y-auto">
-        <div id="modal-box" class="grimoire-page w-full max-w-5xl rounded-3xl p-6 md:p-10 relative shadow-2xl border-2 border-goldLeaf my-auto flex flex-col h-auto max-h-[92vh] overflow-y-auto no-scrollbar">
-            
-            <button onclick="closeBookModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-leatherDark text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg z-20">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+                <div class="relative px-4 sm:px-6 md:px-8 pb-6 z-20">
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 -mt-12 sm:-mt-14 md:-mt-16 mb-4">
+                        <div class="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
+                            <div id="profile-page-avatar" class="relative z-30 w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full border-4 border-goldLeaf bg-leatherDark shadow-2xl overflow-hidden flex items-center justify-center text-goldLeaf text-3xl sm:text-4xl flex-shrink-0">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div class="pb-1">
+                                <h2 id="profile-page-name" class="text-xl sm:text-2xl md:text-3xl font-cinzel font-bold text-goldLeaf">Lecteur</h2>
+                                <p id="profile-page-title" class="text-xs md:text-sm font-lora italic text-parchment/80">Voyageur des mondes</p>
+                                <p id="profile-page-genres" class="text-xs text-goldLeaf/85 mt-1 font-lora"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="profile-page-bio" class="text-sm text-parchment/90 font-lora leading-relaxed max-w-3xl"></p>
+                </div>
+            </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start my-auto">
-                <div class="flex flex-col gap-4">
-                    <div>
-                        <div id="modal-genres-container" class="flex flex-wrap gap-1.5 mb-2"></div>
-                        <h2 id="modal-title" class="text-2xl md:text-3xl font-cinzel font-bold text-goldLeaf leading-tight">Titre du Livre</h2>
-                        <h3 id="modal-author" class="text-lg font-lora italic text-parchment/80 mt-1">par Auteur</h3>
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <aside class="lg:col-span-4 flex flex-col gap-5">
+                    <div class="bg-leatherDark/90 rounded-2xl border border-goldLeaf/40 p-4 shadow-xl backdrop-blur-md">
+                        <h3 class="font-cinzel font-bold text-goldLeaf text-sm pb-2 mb-3 border-b border-goldLeaf/25 flex items-center justify-between">
+                            <span><i class="fa-solid fa-book-open-reader mr-1.5"></i> Livres en cours</span>
+                            <span id="profile-reading-count" class="text-xs font-mono px-2 py-0.5 rounded-full bg-leather text-goldLeaf border border-goldLeaf/30">0</span>
+                        </h3>
+                        <div id="profile-reading-list" class="flex flex-col gap-2.5 max-h-64 overflow-y-auto no-scrollbar"></div>
                     </div>
 
+                    <div class="bg-leatherDark/90 rounded-2xl border border-goldLeaf/40 p-4 shadow-xl backdrop-blur-md">
+                        <div class="flex items-center justify-between pb-2 mb-3 border-b border-goldLeaf/25">
+                            <h3 class="font-cinzel font-bold text-goldLeaf text-sm flex items-center gap-1.5">
+                                <i class="fa-solid fa-bookmark"></i> Prochaine lecture
+                            </h3>
+                            <button type="button" onclick="openNextReadsModal()" class="text-[11px] text-goldLeaf hover:underline font-cinzel font-bold">Gérer</button>
+                        </div>
+                        <div id="profile-next-list" class="flex flex-col gap-2.5 max-h-64 overflow-y-auto no-scrollbar"></div>
+                    </div>
+
+                    <div class="bg-leatherDark/90 rounded-2xl border border-goldLeaf/40 p-4 shadow-xl backdrop-blur-md">
+                        <h3 class="font-cinzel font-bold text-goldLeaf text-sm pb-2 mb-3 border-b border-goldLeaf/25 flex items-center justify-between">
+                            <span><i class="fa-solid fa-books mr-1.5"></i> Autres livres</span>
+                            <span id="profile-other-count" class="text-xs font-mono px-2 py-0.5 rounded-full bg-leather text-goldLeaf border border-goldLeaf/30">0</span>
+                        </h3>
+                        <div id="profile-other-list" class="flex flex-col gap-2.5 max-h-64 overflow-y-auto no-scrollbar"></div>
+                    </div>
+                </aside>
+
+                <div class="lg:col-span-8 flex flex-col gap-5">
+                    <form id="journal-post-form" onsubmit="handleCreateJournalPost(event)" class="bg-leatherDark/90 rounded-2xl border-2 border-goldLeaf/45 p-4 sm:p-5 shadow-xl backdrop-blur-md flex flex-col gap-3.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="font-cinzel font-bold text-goldLeaf text-sm sm:text-base flex items-center gap-2">
+                                <i class="fa-solid fa-feather-pointed"></i> Journal de bord
+                            </h3>
+                            <select id="journal-post-tag" class="bg-leather text-goldLeaf px-2.5 sm:px-3 py-1 rounded-xl border border-goldLeaf/40 text-xs font-cinzel font-bold focus:outline-none">
+                                <option value="commentaire">Commentaire de lecture</option>
+                                <option value="rappel">Rappel personnel</option>
+                            </select>
+                        </div>
+
+                        <textarea id="journal-post-content" rows="3" required placeholder="Écrivez un rappel ou une réflexion sur votre lecture du moment..." class="w-full bg-leather/85 text-parchment placeholder-parchment/45 p-3.5 rounded-xl border border-goldLeaf/35 focus:outline-none focus:border-goldLeaf text-sm font-lora resize-none"></textarea>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[11px] font-cinzel font-bold text-goldLeaf/90">Livre concerné (optionnel)</label>
+                                <select id="journal-post-book" class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/35 focus:outline-none focus:border-goldLeaf text-xs font-lora">
+                                    <option value="">Aucun livre spécifique (note générale)</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[11px] font-cinzel font-bold text-goldLeaf/90">Chapitre / Page (optionnel)</label>
+                                <input type="text" id="journal-post-location" placeholder="Ex: Chapitre 12, p. 248" class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/35 focus:outline-none focus:border-goldLeaf text-xs font-lora">
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end pt-1">
+                            <button type="submit" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i> Publier dans le journal
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="journal-feed-container" class="flex flex-col gap-3.5"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL PROFIL LECTEUR -->
+    <div id="profile-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="w-full max-w-2xl bg-leatherDark rounded-3xl p-5 sm:p-6 md:p-8 relative shadow-2xl border-2 border-goldLeaf my-auto max-h-[92dvh] overflow-y-auto no-scrollbar">
+            <button onclick="closeProfileModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-leather text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-lg sm:text-xl md:text-2xl font-cinzel font-bold text-goldLeaf mb-1 flex items-center gap-2.5 pr-10">
+                <i class="fa-solid fa-id-card"></i> Personnaliser le Profil &amp; le Fond
+            </h2>
+            <p class="text-xs text-parchment/70 italic mb-5">Choisissez votre photo, bannière, fond de page et informations personnelles.</p>
+
+            <form id="profile-form" onsubmit="handleProfileSubmit(event)" class="flex flex-col gap-4 text-xs md:text-sm">
+                <div class="flex items-center gap-4 bg-leather/60 p-4 rounded-2xl border border-goldLeaf/30">
+                    <div id="profile-avatar-preview" class="w-16 h-16 rounded-full bg-leatherDark border-2 border-goldLeaf overflow-hidden flex items-center justify-center text-goldLeaf text-2xl flex-shrink-0">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="flex-grow flex flex-col gap-2 min-w-0">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Photo de profil (Image locale)</label>
+                        <input type="file" id="profile-avatar-file" accept="image/*" onchange="previewProfileAvatar(event)" class="bg-leatherDark text-parchment px-2.5 py-1.5 rounded-xl border border-goldLeaf/40 text-xs w-full">
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Ou lien URL de photo de profil</label>
+                    <input type="url" id="profile-avatar-url" oninput="previewProfileAvatarUrl(event)" placeholder="https://..." class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-leather/45 p-4 rounded-2xl border border-goldLeaf/25">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Bannière (Image locale)</label>
+                        <input type="file" id="profile-banner-file" accept="image/*" onchange="previewProfileBanner(event)" class="bg-leatherDark text-parchment px-2.5 py-1.5 rounded-xl border border-goldLeaf/40 text-xs w-full">
+                        <input type="url" id="profile-banner-url" oninput="previewProfileBannerUrl(event)" placeholder="Ou URL de bannière..." class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs">
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Fond pleine page (Image locale)</label>
+                        <input type="file" id="profile-bg-file" accept="image/*" onchange="previewProfileBg(event)" class="bg-leatherDark text-parchment px-2.5 py-1.5 rounded-xl border border-goldLeaf/40 text-xs w-full">
+                        <div class="flex gap-2">
+                            <input type="url" id="profile-bg-url" oninput="previewProfileBgUrl(event)" placeholder="Ou URL de fond..." class="w-full bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs">
+                            <button type="button" onclick="clearProfileBgSelection()" title="Réinitialiser le fond" class="px-3 py-2 bg-leatherDark hover:bg-crimson text-parchment rounded-xl border border-goldLeaf/30 text-xs flex-shrink-0">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Pseudo / Nom affiché *</label>
+                        <input type="text" id="profile-display-name" required placeholder="Ex: Archiviste d'Azur" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Titre / Rôle</label>
+                        <input type="text" id="profile-title" placeholder="Ex: Chasseur de chroniques" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Genres favoris</label>
+                    <input type="text" id="profile-favorite-genres" placeholder="Ex: Dark Fantasy, Mythologie, SF..." class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Bio / Devise du lecteur</label>
+                    <textarea id="profile-bio" rows="3" placeholder="Ce que vous aimez lire, vos objectifs de lecture..." class="bg-leather text-parchment p-3 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf resize-none"></textarea>
+                </div>
+
+                <button type="submit" class="w-full py-3 mt-1 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-sm rounded-xl shadow-xl hover:opacity-95 transition-all uppercase tracking-wider">
+                    <i class="fa-solid fa-check mr-1.5"></i> Enregistrer le profil
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL PROCHAINES LECTURES -->
+    <div id="next-reads-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="w-full max-w-2xl bg-leatherDark rounded-3xl p-4 sm:p-6 md:p-8 relative shadow-2xl border-2 border-goldLeaf my-auto max-h-[92dvh] overflow-y-auto overflow-x-hidden no-scrollbar min-w-0">
+            <button onclick="closeNextReadsModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-leather text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-lg sm:text-xl md:text-2xl font-cinzel font-bold text-goldLeaf mb-1 flex items-center gap-2.5 pr-10">
+                <i class="fa-solid fa-bookmark"></i> Prochaine lecture (PAL)
+            </h2>
+            <p class="text-xs text-parchment/70 italic mb-5">Retrouvez rapidement vos prochains livres quand vous terminez une lecture.</p>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 mb-6 bg-leather/60 p-3 rounded-2xl border border-goldLeaf/30 w-full min-w-0">
+                <select id="pal-book-select" class="flex-1 min-w-0 w-full truncate bg-leatherDark text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs md:text-sm font-lora">
+                    <option value="">Choisir un livre de votre bibliothèque...</option>
+                </select>
+                <button type="button" onclick="addSelectedBookToPal()" class="px-4 py-2.5 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-xs rounded-xl shadow hover:opacity-95 transition-all whitespace-nowrap flex-shrink-0">
+                    <i class="fa-solid fa-plus mr-1"></i> Ajouter
+                </button>
+            </div>
+
+            <div id="pal-list-container" class="flex flex-col gap-3 min-w-0"></div>
+        </div>
+    </div>
+
+    <!-- MODAL CRÉATION MANUELLE DE LIVRE -->
+    <div id="create-book-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="w-full max-w-2xl bg-leatherDark rounded-3xl p-5 sm:p-6 md:p-8 relative shadow-2xl border-2 border-goldLeaf my-auto max-h-[92dvh] overflow-y-auto no-scrollbar">
+            <button onclick="closeCreateBookModal()" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-leather text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-lg sm:text-xl md:text-2xl font-cinzel font-bold text-goldLeaf mb-1 flex items-center gap-2.5 pr-10">
+                <i class="fa-solid fa-feather-pointed"></i> Créer un nouveau livre
+            </h2>
+            <p class="text-xs text-parchment/70 italic mb-5">Ajoutez manuellement un ouvrage ou un journal de lecture (sans liseuse EPUB).</p>
+
+            <form id="create-book-form" onsubmit="handleCreateBookSubmit(event)" class="flex flex-col gap-4 text-xs md:text-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Titre *</label>
+                        <input type="text" id="new-book-title" required placeholder="Titre du livre ou journal" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Auteur</label>
+                        <input type="text" id="new-book-author" placeholder="Nom de l'auteur" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Genre</label>
+                        <input type="text" id="new-book-genre" placeholder="Ex: Fantasy, Journal..." class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Saga</label>
+                        <input type="text" id="new-book-saga" placeholder="Nom de la saga (optionnel)" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Tome n°</label>
+                        <input type="number" min="1" step="0.5" id="new-book-tome" value="1" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">ISBN</label>
+                        <input type="text" id="new-book-isbn" placeholder="Optionnel" class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Couverture (Image locale)</label>
+                        <input type="file" id="new-book-cover-file" accept="image/*" onchange="previewNewBookCover(event)" class="bg-leatherDark text-parchment px-2.5 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs w-full">
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4 items-start">
+                    <div class="flex-grow w-full flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Ou lien URL de couverture</label>
+                        <input type="url" id="new-book-cover-url" oninput="previewNewBookCoverUrl(event)" placeholder="https://..." class="bg-leather text-parchment px-3 py-2.5 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="w-20 h-28 rounded-xl overflow-hidden border-2 border-goldLeaf/50 bg-leather flex-shrink-0">
+                        <img id="new-book-cover-preview" src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400" alt="Aperçu couverture" class="w-full h-full object-cover">
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Description / Résumé</label>
+                    <textarea id="new-book-description" rows="2" placeholder="Résumé ou contexte du livre..." class="bg-leather text-parchment p-3 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf resize-none"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Début de lecture</label>
+                        <input type="date" id="new-book-start-date" class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Fin de lecture</label>
+                        <input type="date" id="new-book-end-date" class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-goldLeaf font-cinzel font-bold text-xs">Nombre de lectures (optionnel)</label>
+                        <input type="number" min="1" step="1" id="new-book-read-count" placeholder="Ex: 2" class="bg-leather text-parchment px-3 py-2 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                    </div>
+                    <div class="flex items-end pb-1">
+                        <label class="flex items-center gap-2 text-xs text-parchment/90 font-lora cursor-pointer">
+                            <input type="checkbox" id="new-book-rereading" class="rounded border-goldLeaf/40 bg-leather text-goldLeaf">
+                            <span>Marquer comme en relecture</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-goldLeaf font-cinzel font-bold text-xs">Journal / Commentaires</label>
+                    <textarea id="new-book-comment" rows="3" placeholder="Écrivez vos premières notes de journal..." class="bg-leather text-parchment p-3 rounded-xl border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf resize-none"></textarea>
+                </div>
+
+                <button type="submit" class="w-full py-3 mt-2 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold text-sm rounded-xl shadow-xl hover:opacity-95 transition-all uppercase tracking-wider">
+                    <i class="fa-solid fa-plus mr-1.5"></i> Ajouter à la bibliothèque
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DÉTAIL DU LIVRE -->
+    <div id="book-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-2 sm:p-3 md:p-6 overflow-y-auto">
+        <div id="modal-box" class="grimoire-page w-full max-w-5xl rounded-3xl p-5 sm:p-6 md:p-10 relative shadow-2xl border-2 border-goldLeaf my-auto flex flex-col h-auto max-h-[92dvh] overflow-y-auto no-scrollbar">
+            <button onclick="closeBookModal()" class="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 w-10 h-10 rounded-full bg-leatherDark text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg z-20">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-start my-auto">
+                <div class="flex flex-col gap-4">
+                    <div class="pr-8">
+                        <div id="modal-genres-container" class="flex flex-wrap gap-1.5 mb-2"></div>
+                        <h2 id="modal-title" class="text-xl sm:text-2xl md:text-3xl font-cinzel font-bold text-goldLeaf leading-tight">Titre du Livre</h2>
+                        <h3 id="modal-author" class="text-base sm:text-lg font-lora italic text-parchment/80 mt-1">par Auteur</h3>
+                    </div>
                     <div class="bg-black/30 p-4 rounded-xl border border-goldLeaf/30 text-sm flex flex-col gap-2 shadow-inner">
                         <div class="flex justify-between items-center border-b border-goldLeaf/20 pb-1.5">
                             <span class="font-semibold text-goldLeaf/90">ISBN :</span>
@@ -267,60 +684,76 @@
                             <span class="font-semibold text-goldLeaf/90">Saga :</span>
                             <span id="modal-saga-info" class="text-parchment font-medium"></span>
                         </div>
+                        <div class="hidden justify-between items-center pt-1.5 border-t border-goldLeaf/20" id="modal-read-count-row">
+                            <span class="font-semibold text-goldLeaf/90">Nombre de lectures :</span>
+                            <span id="modal-read-count-value" class="font-mono text-goldLeaf font-bold text-xs bg-black/40 px-2.5 py-0.5 rounded border border-goldLeaf/30"></span>
+                        </div>
                     </div>
-
                     <div class="flex flex-col gap-1">
                         <span class="text-xs font-bold uppercase tracking-wider text-goldLeaf/80 font-cinzel flex items-center gap-1.5">
-                            <i class="fa-solid fa-book-open"></i> Description complète de l'EPUB
+                            <i class="fa-solid fa-book-open"></i> Description complète
                         </span>
-                        <div id="modal-description" class="text-sm leading-relaxed text-parchment/90 bg-black/25 p-3.5 rounded-xl border border-goldLeaf/20 font-lora h-auto"></div>
+                        <div id="modal-description" class="text-sm leading-relaxed text-parchment/90 bg-black/25 p-3.5 rounded-xl border border-goldLeaf/20 font-lora"></div>
                     </div>
-
-                    <div class="bg-leatherDark/90 text-parchment p-4 rounded-2xl border border-crimson/40 shadow-lg flex flex-col gap-3 mt-1">
+                    <div class="bg-leatherDark/90 text-parchment p-4 rounded-2xl border border-goldLeaf/40 shadow-lg flex flex-col gap-3 mt-1">
                         <h4 class="font-cinzel text-goldLeaf text-sm font-semibold tracking-wide border-b border-goldLeaf/30 pb-1.5 flex items-center gap-2">
-                            <i class="fa-solid fa-feather-pointed"></i> Journal de Pèlerinage d'Hiver
+                            <i class="fa-solid fa-feather-pointed"></i> Journal de Pèlerinage
                         </h4>
-                        
-                        <div class="grid grid-cols-2 gap-3 text-xs">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div class="flex flex-col gap-1">
                                 <label class="text-parchment/80 font-lora">Début de lecture</label>
-                                <input type="date" id="input-start-date" class="bg-leather text-parchment px-3 py-2 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                                <input type="date" id="input-start-date" class="bg-leather text-parchment px-3 py-2 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf w-full">
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label class="text-parchment/80 font-lora">Fin de lecture</label>
-                                <input type="date" id="input-end-date" class="bg-leather text-parchment px-3 py-2 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf">
+                                <input type="date" id="input-end-date" class="bg-leather text-parchment px-3 py-2 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf w-full">
                             </div>
                         </div>
-
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs items-end">
+                            <div class="flex flex-col gap-1">
+                                <label class="text-parchment/80 font-lora">Nombre de lectures (optionnel)</label>
+                                <input type="number" min="1" step="1" id="input-read-count" placeholder="Ex: 2" class="bg-leather text-parchment px-3 py-2 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf w-full">
+                            </div>
+                            <label class="flex items-center gap-2 bg-leather/75 px-3 py-2 rounded-lg border border-goldLeaf/30 text-parchment/90 cursor-pointer">
+                                <input type="checkbox" id="input-rereading" class="rounded border-goldLeaf/40 bg-leather text-goldLeaf">
+                                <span>Suivi relecture actif</span>
+                            </label>
+                        </div>
                         <div class="flex flex-col gap-1 text-xs">
                             <label class="text-parchment/80 font-lora">Commentaires et pensées personnelles</label>
                             <textarea id="input-comment" rows="3" placeholder="Inscrivez vos réflexions sur cet ouvrage..." class="bg-leather text-parchment p-3 rounded-lg border border-goldLeaf/40 focus:outline-none focus:border-goldLeaf text-xs font-lora resize-none"></textarea>
                         </div>
-
-                        <button onclick="saveBookProgress()" class="w-full py-2 bg-gradient-to-r from-crimson via-red-600 to-crimson text-parchment font-cinzel font-bold rounded-lg shadow hover:opacity-95 transition-all text-xs tracking-wider uppercase border border-goldLeaf/40">
+                        <button onclick="saveBookProgress()" class="w-full py-2.5 bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark font-cinzel font-bold rounded-lg shadow hover:opacity-95 transition-all text-xs tracking-wider uppercase">
                             <i class="fa-solid fa-floppy-disk mr-1"></i> Sauvegarder les notes
                         </button>
                     </div>
+
+                    <div class="bg-leatherDark/90 text-parchment p-4 rounded-2xl border border-goldLeaf/40 shadow-lg flex flex-col gap-2.5">
+                        <h4 class="font-cinzel text-goldLeaf text-sm font-semibold tracking-wide border-b border-goldLeaf/30 pb-1.5 flex items-center gap-2">
+                            <i class="fa-solid fa-comments"></i> Notes &amp; passages du journal de bord
+                        </h4>
+                        <div id="modal-book-journal-entries" class="flex flex-col gap-2 max-h-56 overflow-y-auto no-scrollbar text-xs"></div>
+                    </div>
                 </div>
 
-                <div class="flex flex-col gap-6 items-center relative">
-                    <button onclick="deleteCurrentBook()" title="Supprimer ce livre" class="absolute top-7 right-0 text-parchment/60 hover:text-crimson text-lg transition-colors p-1 z-10">
+                <div class="flex flex-col gap-5 items-center relative">
+                    <button onclick="deleteCurrentBook()" title="Supprimer ce livre" class="absolute top-2 right-0 text-parchment/60 hover:text-crimson text-lg transition-colors p-2 z-10">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
-
-                    <div class="relative group w-64 md:w-72 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border-4 border-goldLeaf/60 bg-leatherDark mt-4">
+                    <div class="relative group w-52 sm:w-64 md:w-72 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl border-4 border-goldLeaf/60 bg-leatherDark mt-2">
                         <img id="modal-cover" src="" alt="Couverture" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onerror="this.src='https://placehold.co/400x600/4a2511/d4af37?text=Couverture+Introuvable'">
                     </div>
-
-                    <div class="w-full flex flex-col gap-2">
-                        <button onclick="launchEpubReader()" class="w-full py-3.5 px-6 bg-gradient-to-r from-crimson via-red-700 to-crimson hover:from-red-600 hover:to-red-500 text-parchment font-cinzel font-bold text-base rounded-xl shadow-xl border-2 border-goldLeaf flex items-center justify-center gap-3 transition-transform hover:scale-[1.02]">
-                            <i class="fa-solid fa-mug-hot text-goldLeaf text-xl"></i> Lire au coin du feu
+                    <div id="modal-read-btn-wrapper" class="w-full flex flex-col gap-2">
+                        <button onclick="launchReader()" class="w-full py-3.5 px-6 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-parchment font-cinzel font-bold text-sm sm:text-base rounded-xl shadow-xl border-2 border-goldLeaf flex items-center justify-center gap-3 transition-transform active:scale-[0.99]">
+                            <i class="fa-solid fa-book-open-reader text-goldLeaf text-lg sm:text-xl"></i> <span id="modal-read-btn-text">Commencer la lecture</span>
                         </button>
                     </div>
-
+                    <button type="button" id="modal-pal-btn" onclick="toggleCurrentBookInPal()" class="w-full py-2.5 px-4 bg-leatherDark/90 hover:bg-leather text-goldLeaf font-cinzel font-bold text-xs rounded-xl border border-goldLeaf/50 flex items-center justify-center gap-2 transition-colors">
+                        <i class="fa-solid fa-bookmark"></i> <span id="modal-pal-btn-text">Ajouter aux prochaines lectures</span>
+                    </button>
                     <div class="w-full bg-black/30 p-4 rounded-2xl border border-goldLeaf/30 flex flex-col gap-2 shadow-inner">
                         <h4 class="text-xs font-bold uppercase tracking-wider text-goldLeaf font-cinzel flex items-center gap-2">
-                            <i class="fa-solid fa-layer-group text-goldLeaf"></i> Tomes de la même Saga
+                            <i class="fa-solid fa-layer-group"></i> Tomes de la même Saga
                         </h4>
                         <div id="modal-saga-books" class="flex flex-row flex-nowrap gap-3 overflow-x-auto p-1 no-scrollbar justify-start items-center"></div>
                     </div>
@@ -329,82 +762,1069 @@
         </div>
     </div>
 
-    <!-- Toast de Notification -->
-    <div id="toast" class="fixed bottom-6 right-6 z-50 bg-leatherDark text-parchment px-6 py-3 rounded-xl border border-crimson shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 flex items-center gap-3">
-        <i class="fa-solid fa-holly-berry text-crimson text-lg"></i>
-        <span id="toast-message" class="text-sm font-lora">Notification</span>
+    <!-- LISEUSE ADAPTATIVE MOBILE / TABLETTE / DESKTOP -->
+    <div id="reader-modal" class="fixed inset-0 z-50 bg-leatherDark hidden flex flex-col h-[100dvh]">
+        <div class="bg-leatherDark/95 border-b-2 border-goldLeaf/40 px-3 sm:px-6 py-3 safe-top flex items-center justify-between gap-2 shadow-lg z-10">
+            <div class="flex items-center gap-2 min-w-0">
+                <button onclick="toggleTocDrawer()" title="Ouvrir le sommaire" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-leather text-goldLeaf border border-goldLeaf/40 flex items-center justify-center hover:bg-goldLeaf hover:text-leatherDark transition-colors shadow flex-shrink-0">
+                    <i class="fa-solid fa-list-ul text-sm sm:text-base"></i>
+                </button>
+                <button onclick="closeReader()" class="px-3 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 rounded-xl font-cinzel text-[11px] sm:text-xs font-bold hover:bg-goldLeaf hover:text-leatherDark transition-colors flex items-center gap-1.5 flex-shrink-0">
+                    <i class="fa-solid fa-arrow-left"></i> Quitter
+                </button>
+                <h3 id="reader-book-title" class="text-goldLeaf font-cinzel font-bold text-xs sm:text-base truncate">Titre du livre</h3>
+            </div>
+            <span id="reader-progress" class="text-[11px] sm:text-sm font-lora text-goldLeaf bg-black/40 px-2.5 py-1 rounded-lg border border-goldLeaf/30 whitespace-nowrap flex-shrink-0">Page 1 / 1</span>
+        </div>
+
+        <div id="reader-stage" class="relative flex-grow flex items-center justify-center bg-[#140b06] overflow-hidden p-2 sm:p-4 md:p-8 min-h-0">
+            <button onclick="turnPage(-1)" aria-label="Page précédente" class="hidden sm:flex absolute left-2 md:left-6 z-30 w-11 h-11 md:w-12 md:h-12 rounded-full bg-leather/90 text-goldLeaf border-2 border-goldLeaf/60 shadow-2xl items-center justify-center hover:bg-goldLeaf hover:text-leatherDark transition-all text-lg md:text-xl">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+
+            <div class="w-full max-w-5xl h-full max-h-[82dvh] bg-[#f4ebd0] text-[#22120a] rounded-2xl shadow-2xl border-2 sm:border-4 border-goldLeaf/70 p-4 sm:p-6 md:p-10 relative overflow-hidden">
+                <div class="book-spread">
+                    <div id="page-left" class="page-half page-left"></div>
+                    <div id="page-right" class="hidden md:block page-half page-right"></div>
+                </div>
+            </div>
+
+            <button onclick="turnPage(1)" aria-label="Page suivante" class="hidden sm:flex absolute right-2 md:right-6 z-30 w-11 h-11 md:w-12 md:h-12 rounded-full bg-leather/90 text-goldLeaf border-2 border-goldLeaf/60 shadow-2xl items-center justify-center hover:bg-goldLeaf hover:text-leatherDark transition-all text-lg md:text-xl">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+
+        <div class="bg-leatherDark/95 border-t border-goldLeaf/30 px-3 sm:px-6 py-2.5 safe-bottom flex items-center justify-between gap-2 text-xs text-parchment/80 font-lora z-10">
+            <button onclick="turnPage(-1)" class="sm:hidden px-3 py-1.5 rounded-lg bg-leather text-goldLeaf border border-goldLeaf/40 text-xs">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <div id="reader-chapter-title" class="truncate text-goldLeaf italic text-[11px] sm:text-xs">Chapitre</div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <span id="reader-chapter-remaining" class="font-mono text-goldLeaf/90 text-[11px] sm:text-xs">0%</span>
+                <button onclick="markCurrentBookCompleted()" title="Marquer comme terminé (100%)" class="px-2.5 py-1 rounded-lg bg-leather hover:bg-goldLeaf text-goldLeaf hover:text-leatherDark border border-goldLeaf/40 font-cinzel font-bold text-[10px] sm:text-xs transition-colors">
+                    100%
+                </button>
+                <button onclick="turnPage(1)" class="sm:hidden px-3 py-1.5 rounded-lg bg-leather text-goldLeaf border border-goldLeaf/40 text-xs">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
     </div>
 
-    <!-- Pied de page -->
-    <footer class="mt-auto py-6 bg-leatherDark border-t border-crimson/40 text-center text-parchment/60 text-xs font-lora">
+    <div id="calc-sandbox" style="position: fixed; left: -9999px; top: 0; visibility: hidden; pointer-events: none; overflow: visible;"></div>
+
+    <div id="toast" class="fixed bottom-5 right-4 sm:right-6 z-50 bg-leatherDark text-parchment px-4 sm:px-6 py-3 rounded-xl border border-goldLeaf shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 flex items-center gap-3 max-w-[90vw]">
+        <i class="fa-solid fa-scroll text-goldLeaf text-base sm:text-lg flex-shrink-0"></i>
+        <span id="toast-message" class="text-xs sm:text-sm font-lora">Notification</span>
+    </div>
+
+    <footer class="mt-auto py-6 safe-bottom bg-leatherDark border-t border-goldLeaf/30 text-center text-parchment/60 text-xs font-lora flex flex-col items-center gap-1">
+        <p id="total-grimoires-count">0 grimoire</p>
         <p>Les Grimoires et Chroniques</p>
     </footer>
 
-    <!-- Logique JavaScript avec IndexedDB (Dexie) -->
     <script>
+        const SUPABASE_URL = 'https://fvmqclyjtbtyyjedbtnx.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_iIwibD2KMCmVBKEXTCvJ_Q_5RIzYN5f';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         const db = new Dexie('GrimoiresChroniclesDB');
-        db.version(1).stores({
-            books: 'id, title, author, genre, saga, endDate'
+        db.version(8).stores({
+            books: 'id, userId, title, author, genre, saga, endDate'
         });
 
-        const defaultBooks = [
-            {
-                id: 1,
-                title: "La Communauté de l'Anneau",
-                author: "J.R.R. Tolkien",
-                genre: "High Fantasy",
-                saga: "Le Seigneur des Anneaux",
-                isbn: "978-2070612888",
-                cover: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400",
-                description: "Dans les prairies paisibles de la Comté, le jeune Hobbit Frodon Sacquet hérite d'un anneau magique...",
-                startDate: "2026-01-10",
-                endDate: "2026-01-25",
-                comment: "Une introduction extraordinaire à la Terre du Milieu.",
-                filePath: "lotr1.epub"
-            },
-            {
-                id: 2,
-                title: "La Communauté de l'Anneau - Double",
-                author: "J.R.R. Tolkien",
-                genre: "High Fantasy",
-                saga: "Le Seigneur des Anneaux",
-                isbn: "978-2070612895",
-                cover: "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&q=80&w=400",
-                description: "La Communauté est dispersée. Frodon et Sam continuent leur route vers le Mordor seuls.",
-                startDate: "2026-01-26",
-                endDate: "2026-02-12",
-                comment: "Le personnage de Gollum prend toute son envergure psychologique ici.",
-                filePath: "lotr2.epub"
-            }
-        ];
-
+        let currentUser = null;
+        let isSignUpMode = false;
         let books = [];
+        let userProfile = {
+            displayName: '',
+            title: 'Voyageur des mondes',
+            favoriteGenres: '',
+            bio: '',
+            avatar: '',
+            banner: '',
+            pageBg: '',
+            nextReadIds: [],
+            journalPosts: [],
+            sortMode: 'title',
+            manualBookOrder: []
+        };
+        let draggedBookId = null;
+        let uploadedProfileAvatarDataUrl = null;
+        let uploadedProfileBannerDataUrl = null;
+        let uploadedProfileBgDataUrl = null;
         let currentSelectedBookId = null;
+        let currentReadingBookId = null;
+        let pagesArray = [];
+        let currentSpreadIndex = 0;
+        let chaptersToc = [];
+        let uploadedNewBookCoverDataUrl = null;
+        let touchStartX = null;
+
+        const DEFAULT_COVER = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400";
+        const DEFAULT_BG_IMAGE = "radial-gradient(circle, #2d190e 0%, #110804 100%)";
+
+        const isDesktopReaderSpread = () => window.innerWidth >= 768;
+        const getPagesPerStep = () => (isDesktopReaderSpread() ? 2 : 1);
+        const hasEpubFormat = (book) => Boolean(book && (book.isEpub === true || book.fileBlob));
+        const getProfileStorageKey = () => currentUser ? `grimoires_profile_${currentUser.id}` : 'grimoires_profile_guest';
+        const getHiddenNextReadsKey = () => currentUser ? `grimoires_hidden_next_reads_${currentUser.id}` : 'grimoires_hidden_next_reads_guest';
+
+        function normalizeNextReadIds(list) {
+            if (!Array.isArray(list)) return [];
+            const seen = new Set();
+            const out = [];
+            for (const raw of list) {
+                const id = Number(raw);
+                if (!Number.isNaN(id) && id > 0 && !seen.has(id)) {
+                    seen.add(id);
+                    out.push(id);
+                }
+            }
+            return out;
+        }
+
+        function persistHiddenNextReads(ids) {
+            const clean = normalizeNextReadIds(ids);
+            userProfile.nextReadIds = clean;
+            try {
+                localStorage.setItem(getHiddenNextReadsKey(), JSON.stringify(clean));
+                localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+            } catch (_e) {}
+            return clean;
+        }
+
+        function loadHiddenNextReads() {
+            let fromDedicated = [];
+            let fromProfile = [];
+            try {
+                fromDedicated = normalizeNextReadIds(JSON.parse(localStorage.getItem(getHiddenNextReadsKey()) || '[]'));
+            } catch (_e) {}
+            try {
+                const prof = JSON.parse(localStorage.getItem(getProfileStorageKey()) || '{}');
+                fromProfile = normalizeNextReadIds(prof.nextReadIds || []);
+            } catch (_e) {}
+            const fromMeta = normalizeNextReadIds(currentUser?.user_metadata?.next_read_ids || []);
+            return fromDedicated.length > 0 ? fromDedicated : (fromProfile.length > 0 ? fromProfile : fromMeta);
+        }
+
+        function getEffectiveReadCount(book) {
+            if (!book) return 0;
+            const manual = Number(book.readCount) || 0;
+            const completions = Number(book.completionCount) || 0;
+            return Math.max(manual, completions);
+        }
+
+        function shouldDisplayReadCount(book) {
+            if (!book) return false;
+            const manual = Number(book.readCount) || 0;
+            const completions = Number(book.completionCount) || 0;
+            return manual > 0 || completions > 1;
+        }
+
+        function updateTotalGrimoiresFooter() {
+            const el = document.getElementById('total-grimoires-count');
+            if (!el) return;
+            const total = books.length;
+            el.textContent = `${total} ${total > 1 ? 'grimoires' : 'grimoire'}`;
+        }
+
+        function syncManualOrderWithBooks() {
+            const currentIds = books.map(b => b.id);
+            const existing = (userProfile.manualBookOrder || []).filter(id => currentIds.includes(id));
+            const missing = currentIds
+                .filter(id => !existing.includes(id))
+                .sort((a, b) => {
+                    const ba = books.find(x => x.id === a);
+                    const bb = books.find(x => x.id === b);
+                    return (ba?.title || '').localeCompare(bb?.title || '', 'fr', { sensitivity: 'base' });
+                });
+            userProfile.manualBookOrder = [...existing, ...missing];
+        }
+
+        function getSortedBooks(list) {
+            const mode = userProfile.sortMode || document.getElementById('sort-select')?.value || 'title';
+            const arr = [...list];
+
+            if (mode === 'author') {
+                return arr.sort((a, b) => {
+                    const byAuthor = (a.author || '').localeCompare(b.author || '', 'fr', { sensitivity: 'base' });
+                    if (byAuthor !== 0) return byAuthor;
+                    return (a.title || '').localeCompare(b.title || '', 'fr', { sensitivity: 'base' });
+                });
+            }
+            if (mode === 'added') {
+                return arr.sort((a, b) => {
+                    const timeA = a.addedAt ? new Date(a.addedAt).getTime() : Number(a.id) || 0;
+                    const timeB = b.addedAt ? new Date(b.addedAt).getTime() : Number(b.id) || 0;
+                    return timeB - timeA;
+                });
+            }
+            if (mode === 'manual') {
+                syncManualOrderWithBooks();
+                const orderMap = new Map(userProfile.manualBookOrder.map((id, idx) => [id, idx]));
+                return arr.sort((a, b) => (orderMap.get(a.id) ?? 999999) - (orderMap.get(b.id) ?? 999999));
+            }
+            return arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'fr', { sensitivity: 'base' }));
+        }
+
+        async function handleSortChange() {
+            const select = document.getElementById('sort-select');
+            userProfile.sortMode = select ? select.value : 'title';
+            if (userProfile.sortMode === 'manual') {
+                syncManualOrderWithBooks();
+            }
+            localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+            await renderLibrary();
+        }
+
+        function loadUserProfile() {
+            const fallbackName = currentUser?.email ? currentUser.email.split('@')[0] : 'Lecteur';
+            let parsed = {};
+            try {
+                parsed = JSON.parse(localStorage.getItem(getProfileStorageKey()) || '{}');
+            } catch (_e) {
+                parsed = {};
+            }
+            userProfile = {
+                displayName: parsed.displayName || fallbackName,
+                title: parsed.title || 'Voyageur des mondes',
+                favoriteGenres: parsed.favoriteGenres || '',
+                bio: parsed.bio || '',
+                avatar: parsed.avatar || '',
+                banner: parsed.banner || '',
+                pageBg: parsed.pageBg || '',
+                nextReadIds: loadHiddenNextReads(),
+                journalPosts: Array.isArray(parsed.journalPosts) ? parsed.journalPosts : [],
+                sortMode: parsed.sortMode || 'title',
+                manualBookOrder: Array.isArray(parsed.manualBookOrder) ? parsed.manualBookOrder : []
+            };
+            persistHiddenNextReads(userProfile.nextReadIds);
+            const sortSelect = document.getElementById('sort-select');
+            if (sortSelect) sortSelect.value = userProfile.sortMode;
+            applyPageBackground();
+            renderAccountHeader();
+            renderProfilePage();
+        }
+
+        function applyPageBackground() {
+            document.body.style.backgroundImage = userProfile.pageBg
+                ? `linear-gradient(rgba(17, 8, 4, 0.72), rgba(17, 8, 4, 0.82)), url("${userProfile.pageBg}")`
+                : DEFAULT_BG_IMAGE;
+        }
+
+        async function saveUserProfile() {
+            if (!currentUser) return;
+            persistHiddenNextReads(userProfile.nextReadIds);
+            applyPageBackground();
+            renderAccountHeader();
+            renderProfilePage();
+            await supabaseClient.auth.updateUser({
+                data: {
+                    display_name: userProfile.displayName,
+                    reader_title: userProfile.title,
+                    favorite_genres: userProfile.favoriteGenres,
+                    bio: userProfile.bio,
+                    next_read_ids: userProfile.nextReadIds
+                }
+            }).catch(() => {});
+        }
+
+        function renderAvatarInto(containerEl, iconSizeClass = 'text-sm') {
+            if (!containerEl) return;
+            containerEl.innerHTML = userProfile.avatar
+                ? `<img src="${userProfile.avatar}" alt="Avatar" class="w-full h-full object-cover">`
+                : `<i class="fa-solid fa-user ${iconSizeClass}"></i>`;
+        }
+
+        function renderAccountHeader() {
+            const cleanIds = normalizeNextReadIds(userProfile.nextReadIds);
+            const validPalIds = books.length > 0
+                ? cleanIds.filter(id => books.some(b => Number(b.id) === id))
+                : cleanIds;
+            userProfile.nextReadIds = validPalIds;
+            try {
+                localStorage.setItem(getHiddenNextReadsKey(), JSON.stringify(validPalIds));
+                localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+            } catch (_e) {}
+
+            renderAvatarInto(document.getElementById('header-account-badge'), 'text-sm');
+            const palBadge = document.getElementById('pal-count-badge');
+            if (palBadge) palBadge.textContent = String(validPalIds.length);
+            updateTotalGrimoiresFooter();
+        }
+
+        function renderProfilePage() {
+            const bannerBox = document.getElementById('profile-banner-box');
+            if (bannerBox) {
+                bannerBox.style.backgroundImage = userProfile.banner
+                    ? `linear-gradient(to bottom, rgba(20,11,6,0.25), rgba(34,18,10,0.75)), url("${userProfile.banner}")`
+                    : 'linear-gradient(to right, #3d2314, #5a3319, #22120a)';
+            }
+
+            renderAvatarInto(document.getElementById('profile-page-avatar'), 'text-3xl sm:text-4xl');
+            document.getElementById('profile-page-name').textContent = userProfile.displayName || 'Lecteur';
+            document.getElementById('profile-page-title').textContent = userProfile.title || 'Voyageur des mondes';
+            document.getElementById('profile-page-genres').textContent = userProfile.favoriteGenres ? `Genres favoris : ${userProfile.favoriteGenres}` : '';
+            document.getElementById('profile-page-bio').textContent = userProfile.bio || "Aucune bio renseignée pour le moment.";
+
+            renderProfileSideSections();
+            populateJournalBookSelect();
+            renderJournalFeed();
+        }
+
+        function createMiniBookRow(book) {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2.5 p-2 rounded-xl bg-leather/60 hover:bg-leather border border-goldLeaf/25 cursor-pointer transition-colors';
+            row.onclick = () => openBookModal(book.id);
+            row.innerHTML = `
+                <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-9 h-12 object-cover rounded border border-goldLeaf/40 flex-shrink-0" onerror="this.src='https://placehold.co/80x110/4a2511/d4af37?text=Cover'">
+                <div class="min-w-0 flex-grow">
+                    <p class="font-cinzel font-bold text-goldLeaf text-xs truncate">${escapeHtml(book.title)}</p>
+                    <p class="font-lora italic text-parchment/70 text-[11px] truncate">${escapeHtml(book.author)}</p>
+                </div>
+            `;
+            return row;
+        }
+
+        function fillSideList(el, items, emptyText) {
+            el.innerHTML = '';
+            if (items.length === 0) {
+                el.innerHTML = `<p class="text-[11px] text-parchment/60 italic">${emptyText}</p>`;
+                return;
+            }
+            items.forEach(b => el.appendChild(createMiniBookRow(b)));
+        }
+
+        function renderProfileSideSections() {
+            const readingEl = document.getElementById('profile-reading-list');
+            const nextEl = document.getElementById('profile-next-list');
+            const otherEl = document.getElementById('profile-other-list');
+            if (!readingEl || !otherEl) return;
+
+            const palIds = normalizeNextReadIds(userProfile.nextReadIds);
+            const readingBooks = books.filter(b => Boolean((b.startDate && !b.endDate) || b.isRereading));
+            const nextBooks = palIds.map(id => books.find(b => Number(b.id) === id)).filter(Boolean);
+            const otherBooks = books.filter(b => !((b.startDate && !b.endDate) || b.isRereading));
+
+            document.getElementById('profile-reading-count').textContent = String(readingBooks.length);
+            document.getElementById('profile-other-count').textContent = String(otherBooks.length);
+
+            fillSideList(readingEl, readingBooks, "Aucun livre en cours.");
+            if (nextEl) {
+                fillSideList(nextEl, nextBooks, "Aucune prochaine lecture.");
+            }
+            fillSideList(otherEl, otherBooks, "Aucun autre livre.");
+        }
+
+        function populateJournalBookSelect() {
+            const select = document.getElementById('journal-post-book');
+            if (!select) return;
+            const currentVal = select.value;
+            const sorted = [...books].sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+            select.innerHTML = '<option value="">Aucun livre spécifique (note générale)</option>';
+            sorted.forEach(b => {
+                select.innerHTML += `<option value="${b.id}">${escapeHtml(b.title)}</option>`;
+            });
+            if (currentVal) select.value = currentVal;
+        }
+
+        async function handleCreateJournalPost(event) {
+            event.preventDefault();
+            if (!currentUser) return;
+            const content = document.getElementById('journal-post-content').value.trim();
+            if (!content) return;
+
+            const rawBookId = document.getElementById('journal-post-book').value;
+            userProfile.journalPosts = [{
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                tag: document.getElementById('journal-post-tag').value || 'commentaire',
+                content,
+                bookId: rawBookId ? Number(rawBookId) : null,
+                location: document.getElementById('journal-post-location').value.trim(),
+                createdAt: new Date().toISOString()
+            }, ...(userProfile.journalPosts || [])];
+
+            await saveUserProfile();
+            document.getElementById('journal-post-content').value = '';
+            document.getElementById('journal-post-location').value = '';
+            showToast("Note ajoutée au journal de bord !");
+        }
+
+        async function deleteJournalPost(postId) {
+            userProfile.journalPosts = (userProfile.journalPosts || []).filter(p => p.id !== postId);
+            await saveUserProfile();
+            showToast("Entrée supprimée.");
+        }
+
+        function formatPostDate(isoStr) {
+            try {
+                const d = new Date(isoStr);
+                return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} • ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+            } catch (_e) {
+                return isoStr || '';
+            }
+        }
+
+        function renderJournalFeed() {
+            const container = document.getElementById('journal-feed-container');
+            if (!container) return;
+
+            const posts = [...(userProfile.journalPosts || [])].sort(
+                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+            );
+
+            if (posts.length === 0) {
+                container.innerHTML = `<div class="bg-leatherDark/75 rounded-2xl border border-goldLeaf/30 p-8 text-center text-parchment/70 font-lora text-xs">Votre journal de bord est vide. Publiez un rappel ou une note de lecture ci-dessus.</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            posts.forEach(post => {
+                const linkedBook = post.bookId ? books.find(b => b.id === post.bookId) : null;
+                const isReminder = post.tag === 'rappel';
+                const bookBadgeHtml = linkedBook
+                    ? `<button type="button" onclick="openBookModal(${linkedBook.id})" class="px-2.5 py-1 rounded-full bg-goldLeaf/15 hover:bg-goldLeaf/30 text-goldLeaf border border-goldLeaf/40 text-[11px] font-cinzel font-bold transition-colors flex items-center gap-1.5"><i class="fa-solid fa-book"></i> ${escapeHtml(linkedBook.title)}</button>`
+                    : '';
+                const locBadgeHtml = post.location
+                    ? `<span class="px-2.5 py-1 rounded-full bg-leather text-parchment/90 border border-goldLeaf/25 text-[11px] font-mono"><i class="fa-solid fa-bookmark text-goldLeaf/80 mr-1"></i>${escapeHtml(post.location)}</span>`
+                    : '';
+                const tagBadgeHtml = isReminder
+                    ? `<span class="px-2.5 py-0.5 rounded-full bg-amber-900/50 text-goldLeaf border border-goldLeaf/40 text-[10px] font-cinzel font-bold uppercase">Rappel</span>`
+                    : `<span class="px-2.5 py-0.5 rounded-full bg-leather text-parchment/85 border border-goldLeaf/25 text-[10px] font-cinzel font-bold uppercase">Commentaire</span>`;
+
+                const card = document.createElement('article');
+                card.className = 'bg-leatherDark/90 rounded-2xl border border-goldLeaf/35 p-4 shadow-lg backdrop-blur-md flex flex-col gap-2.5';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="w-8 h-8 rounded-full border border-goldLeaf/60 bg-leather overflow-hidden flex items-center justify-center text-goldLeaf text-xs flex-shrink-0">
+                                ${userProfile.avatar ? `<img src="${userProfile.avatar}" alt="Avatar" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user"></i>`}
+                            </div>
+                            <div class="min-w-0">
+                                <span class="font-cinzel font-bold text-goldLeaf text-xs truncate">${escapeHtml(userProfile.displayName || 'Lecteur')}</span>
+                                <span class="text-[11px] text-parchment/60 font-mono ml-1.5">${formatPostDate(post.createdAt)}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            ${tagBadgeHtml}
+                            <button type="button" onclick="deleteJournalPost(${post.id})" title="Supprimer" class="text-parchment/50 hover:text-crimson text-xs p-1 transition-colors">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-sm text-parchment font-lora whitespace-pre-line leading-relaxed sm:pl-10">${escapeHtml(post.content)}</p>
+                    ${(bookBadgeHtml || locBadgeHtml) ? `<div class="flex flex-wrap items-center gap-2 sm:pl-10 pt-1">${bookBadgeHtml}${locBadgeHtml}</div>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderBookJournalEntries(bookId) {
+            const container = document.getElementById('modal-book-journal-entries');
+            if (!container) return;
+
+            const matchingPosts = (userProfile.journalPosts || [])
+                .filter(p => Number(p.bookId) === Number(bookId))
+                .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+            if (matchingPosts.length === 0) {
+                container.innerHTML = `<p class="text-parchment/60 italic">Aucune note associée à ce livre dans le journal de bord.</p>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            matchingPosts.forEach(post => {
+                const entry = document.createElement('div');
+                entry.className = 'bg-leather/75 p-3 rounded-xl border border-goldLeaf/25 flex flex-col gap-1';
+                entry.innerHTML = `
+                    <div class="flex items-center justify-between gap-2 text-[11px]">
+                        <span class="font-cinzel font-bold text-goldLeaf">${post.location ? escapeHtml(post.location) : (post.tag === 'rappel' ? 'Rappel' : 'Note de lecture')}</span>
+                        <span class="font-mono text-parchment/60">${formatPostDate(post.createdAt)}</span>
+                    </div>
+                    <p class="text-parchment/95 font-lora whitespace-pre-line leading-snug">${escapeHtml(post.content)}</p>
+                `;
+                container.appendChild(entry);
+            });
+        }
+
+        const toggleAccountMenu = (e) => { if (e) e.stopPropagation(); document.getElementById('account-dropdown').classList.toggle('hidden'); };
+        const closeAccountMenu = () => document.getElementById('account-dropdown').classList.add('hidden');
+        const toggleImportMenu = (e) => { if (e) e.stopPropagation(); document.getElementById('import-dropdown').classList.toggle('hidden'); };
+        const closeImportMenu = () => document.getElementById('import-dropdown').classList.add('hidden');
+        const toggleSpotifyDrawer = () => document.getElementById('spotify-drawer').classList.toggle('closed');
+        const toggleTocDrawer = () => document.getElementById('toc-drawer').classList.toggle('closed');
+        const closeProfileModal = () => document.getElementById('profile-modal').classList.add('hidden');
+        const closeNextReadsModal = () => document.getElementById('next-reads-modal').classList.add('hidden');
+        const closeCreateBookModal = () => document.getElementById('create-book-modal').classList.add('hidden');
+        const closeBookModal = () => { document.getElementById('book-modal').classList.add('hidden'); currentSelectedBookId = null; };
+
+        function openProfileModal() {
+            uploadedProfileAvatarDataUrl = null;
+            uploadedProfileBannerDataUrl = null;
+            uploadedProfileBgDataUrl = null;
+
+            document.getElementById('profile-display-name').value = userProfile.displayName || '';
+            document.getElementById('profile-title').value = userProfile.title || '';
+            document.getElementById('profile-favorite-genres').value = userProfile.favoriteGenres || '';
+            document.getElementById('profile-bio').value = userProfile.bio || '';
+            document.getElementById('profile-avatar-url').value = userProfile.avatar?.startsWith('http') ? userProfile.avatar : '';
+            document.getElementById('profile-banner-url').value = userProfile.banner?.startsWith('http') ? userProfile.banner : '';
+            document.getElementById('profile-bg-url').value = userProfile.pageBg?.startsWith('http') ? userProfile.pageBg : '';
+
+            const preview = document.getElementById('profile-avatar-preview');
+            preview.innerHTML = userProfile.avatar
+                ? `<img src="${userProfile.avatar}" alt="Aperçu avatar" class="w-full h-full object-cover">`
+                : `<i class="fa-solid fa-user text-2xl"></i>`;
+            document.getElementById('profile-modal').classList.remove('hidden');
+        }
+
+        function readFileDataUrl(file, cb) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onloadend = () => cb(reader.result);
+            reader.readAsDataURL(file);
+        }
+
+        function previewProfileAvatar(event) {
+            readFileDataUrl(event.target.files[0], (res) => {
+                uploadedProfileAvatarDataUrl = res;
+                document.getElementById('profile-avatar-preview').innerHTML = `<img src="${res}" alt="Aperçu avatar" class="w-full h-full object-cover">`;
+            });
+        }
+
+        function previewProfileAvatarUrl(event) {
+            if (uploadedProfileAvatarDataUrl) return;
+            const url = event.target.value.trim();
+            document.getElementById('profile-avatar-preview').innerHTML = url
+                ? `<img src="${url}" alt="Aperçu avatar" class="w-full h-full object-cover">`
+                : `<i class="fa-solid fa-user text-2xl"></i>`;
+        }
+
+        function previewProfileBanner(event) {
+            readFileDataUrl(event.target.files[0], (res) => { uploadedProfileBannerDataUrl = res; });
+        }
+
+        function previewProfileBannerUrl(event) {
+            if (!uploadedProfileBannerDataUrl && event.target.value.trim()) uploadedProfileBannerDataUrl = event.target.value.trim();
+        }
+
+        function previewProfileBg(event) {
+            readFileDataUrl(event.target.files[0], (res) => { uploadedProfileBgDataUrl = res; });
+        }
+
+        function previewProfileBgUrl(event) {
+            uploadedProfileBgDataUrl = event.target.value.trim() || '';
+        }
+
+        function clearProfileBgSelection() {
+            uploadedProfileBgDataUrl = '';
+            document.getElementById('profile-bg-url').value = '';
+            document.getElementById('profile-bg-file').value = '';
+            userProfile.pageBg = '';
+            applyPageBackground();
+        }
+
+        async function handleProfileSubmit(event) {
+            event.preventDefault();
+            const displayName = document.getElementById('profile-display-name').value.trim();
+            if (!displayName) return;
+
+            userProfile.displayName = displayName;
+            userProfile.title = document.getElementById('profile-title').value.trim() || 'Voyageur des mondes';
+            userProfile.favoriteGenres = document.getElementById('profile-favorite-genres').value.trim();
+            userProfile.bio = document.getElementById('profile-bio').value.trim();
+
+            const avatarUrl = document.getElementById('profile-avatar-url').value.trim();
+            const bannerUrl = document.getElementById('profile-banner-url').value.trim();
+            const bgUrl = document.getElementById('profile-bg-url').value.trim();
+
+            if (uploadedProfileAvatarDataUrl || avatarUrl) userProfile.avatar = uploadedProfileAvatarDataUrl || avatarUrl;
+            if (uploadedProfileBannerDataUrl || bannerUrl) userProfile.banner = uploadedProfileBannerDataUrl || bannerUrl;
+            if (uploadedProfileBgDataUrl !== null || bgUrl) userProfile.pageBg = uploadedProfileBgDataUrl ?? bgUrl;
+
+            await saveUserProfile();
+            closeProfileModal();
+            showToast("Profil et apparence enregistrés !");
+        }
+
+        function openNextReadsModal() {
+            renderNextReadsModal();
+            document.getElementById('next-reads-modal').classList.remove('hidden');
+        }
+
+        function renderNextReadsModal() {
+            const select = document.getElementById('pal-book-select');
+            const listEl = document.getElementById('pal-list-container');
+            const palIds = normalizeNextReadIds(userProfile.nextReadIds);
+
+            const availableBooks = books
+                .filter(b => !palIds.includes(Number(b.id)))
+                .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+
+            select.innerHTML = '<option value="">Choisir un livre de votre bibliothèque...</option>';
+            availableBooks.forEach(b => {
+                select.innerHTML += `<option value="${b.id}">${escapeHtml(b.title)} — ${escapeHtml(b.author)}</option>`;
+            });
+
+            if (palIds.length === 0) {
+                listEl.innerHTML = `<div class="bg-leather/40 p-6 rounded-2xl border border-goldLeaf/25 text-center text-parchment/70 font-lora text-xs">Votre pile de prochaines lectures est vide. Sélectionnez un livre ci-dessus ou depuis sa fiche.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = '';
+            palIds.forEach((bookId, idx) => {
+                const book = books.find(b => Number(b.id) === Number(bookId));
+                if (!book) return;
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-3 bg-leather/70 p-3 rounded-2xl border border-goldLeaf/30 min-w-0';
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0 cursor-pointer" onclick="closeNextReadsModal(); openBookModal(${book.id});">
+                        <span class="w-6 h-6 rounded-full bg-goldLeaf text-leatherDark font-cinzel font-bold text-xs flex items-center justify-center flex-shrink-0">${idx + 1}</span>
+                        <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-11 h-16 object-cover rounded-lg border border-goldLeaf/40 flex-shrink-0" onerror="this.src='https://placehold.co/100x150/4a2511/d4af37?text=Cover'">
+                        <div class="min-w-0">
+                            <p class="font-cinzel font-bold text-goldLeaf text-sm truncate">${escapeHtml(book.title)}</p>
+                            <p class="font-lora italic text-parchment/75 text-xs truncate">${escapeHtml(book.author)}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                        ${idx > 0 ? `<button type="button" onclick="movePalBook(${idx}, -1)" title="Monter" class="w-8 h-8 rounded-lg bg-leatherDark text-goldLeaf border border-goldLeaf/30 hover:bg-goldLeaf hover:text-leatherDark transition-colors text-xs"><i class="fa-solid fa-arrow-up"></i></button>` : ''}
+                        ${idx < palIds.length - 1 ? `<button type="button" onclick="movePalBook(${idx}, 1)" title="Descendre" class="w-8 h-8 rounded-lg bg-leatherDark text-goldLeaf border border-goldLeaf/30 hover:bg-goldLeaf hover:text-leatherDark transition-colors text-xs"><i class="fa-solid fa-arrow-down"></i></button>` : ''}
+                        <button type="button" onclick="removeBookFromPal(${book.id})" title="Retirer de la liste" class="w-8 h-8 rounded-lg bg-leatherDark text-parchment/70 border border-goldLeaf/30 hover:bg-crimson hover:text-white transition-colors text-xs"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                `;
+                listEl.appendChild(row);
+            });
+        }
+
+        async function addSelectedBookToPal() {
+            const val = Number(document.getElementById('pal-book-select').value);
+            const current = normalizeNextReadIds(userProfile.nextReadIds);
+            if (val && !current.includes(val)) {
+                userProfile.nextReadIds = [...current, val];
+                await saveUserProfile();
+                renderNextReadsModal();
+                showToast("Ajouté à votre prochaine lecture !");
+            }
+        }
+
+        async function movePalBook(index, delta) {
+            const arr = normalizeNextReadIds(userProfile.nextReadIds);
+            const target = index + delta;
+            if (target < 0 || target >= arr.length) return;
+            const [item] = arr.splice(index, 1);
+            arr.splice(target, 0, item);
+            userProfile.nextReadIds = arr;
+            await saveUserProfile();
+            renderNextReadsModal();
+        }
+
+        async function removeBookFromPal(bookId) {
+            const targetId = Number(bookId);
+            userProfile.nextReadIds = normalizeNextReadIds(userProfile.nextReadIds).filter(id => id !== targetId);
+            await saveUserProfile();
+            renderNextReadsModal();
+            updateModalPalButton();
+            showToast("Retiré de vos prochaines lectures.");
+        }
+
+        function updateModalPalButton() {
+            const btnText = document.getElementById('modal-pal-btn-text');
+            if (!btnText || !currentSelectedBookId) return;
+            const exists = normalizeNextReadIds(userProfile.nextReadIds).includes(Number(currentSelectedBookId));
+            btnText.textContent = exists
+                ? "Retirer des prochaines lectures"
+                : "Ajouter aux prochaines lectures";
+        }
+
+        async function toggleCurrentBookInPal() {
+            if (!currentSelectedBookId) return;
+            const targetId = Number(currentSelectedBookId);
+            const current = normalizeNextReadIds(userProfile.nextReadIds);
+            if (current.includes(targetId)) {
+                userProfile.nextReadIds = current.filter(id => id !== targetId);
+                showToast("Retiré des prochaines lectures.");
+            } else {
+                userProfile.nextReadIds = [...current, targetId];
+                showToast("Ajouté aux prochaines lectures !");
+            }
+            await saveUserProfile();
+            updateModalPalButton();
+        }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await initDatabase();
+            document.addEventListener('click', (e) => {
+                const importWrapper = document.getElementById('import-menu-wrapper');
+                if (importWrapper && !importWrapper.contains(e.target)) closeImportMenu();
+                const accountWrapper = document.getElementById('account-menu-wrapper');
+                if (accountWrapper && !accountWrapper.contains(e.target)) closeAccountMenu();
+            });
+
+            const readerStage = document.getElementById('reader-stage');
+            if (readerStage) {
+                readerStage.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) touchStartX = e.touches[0].clientX;
+                }, { passive: true });
+                readerStage.addEventListener('touchend', (e) => {
+                    if (touchStartX === null || !e.changedTouches.length) return;
+                    const deltaX = e.changedTouches[0].clientX - touchStartX;
+                    touchStartX = null;
+                    if (Math.abs(deltaX) > 48) {
+                        turnPage(deltaX < 0 ? 1 : -1);
+                    }
+                }, { passive: true });
+            }
+
+            window.addEventListener('resize', () => {
+                if (!document.getElementById('reader-modal').classList.contains('hidden') && currentReadingBookId) {
+                    repaginateCurrentBook().then(() => renderSpread());
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (document.getElementById('reader-modal').classList.contains('hidden')) return;
+                if (e.key === 'ArrowRight') turnPage(1);
+                if (e.key === 'ArrowLeft') turnPage(-1);
+            });
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            await handleSessionChange(session);
+            supabaseClient.auth.onAuthStateChange(async (_event, newSession) => {
+                await handleSessionChange(newSession);
+            });
+        });
+
+        function showAuthStatus(message, type = 'info') {
+            const banner = document.getElementById('auth-status-banner');
+            banner.classList.remove('hidden', 'bg-emerald-950/70', 'border-emerald-400/50', 'text-emerald-200', 'bg-amber-950/70', 'border-goldLeaf/50', 'text-parchment');
+            const isOk = type === 'success';
+            banner.classList.add(
+                ...(isOk
+                    ? ['bg-emerald-950/70', 'border-emerald-400/50', 'text-emerald-200']
+                    : ['bg-amber-950/70', 'border-goldLeaf/50', 'text-parchment'])
+            );
+            const iconClass = isOk ? 'fa-circle-check text-emerald-400' : 'fa-envelope-circle-check text-goldLeaf';
+            banner.innerHTML = `<i class="fa-solid ${iconClass} text-base mt-0.5 flex-shrink-0"></i><span>${escapeHtml(message)}</span>`;
+        }
+
+        function hideAuthStatus() {
+            const banner = document.getElementById('auth-status-banner');
+            banner.classList.add('hidden');
+            banner.innerHTML = '';
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById('auth-password');
+            const icon = document.getElementById('password-eye-icon');
+            const isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            icon.classList.toggle('fa-eye', !isHidden);
+            icon.classList.toggle('fa-eye-slash', isHidden);
+        }
+
+        async function handleForgotPassword() {
+            const email = document.getElementById('auth-email').value.trim();
+            const errorEl = document.getElementById('auth-error');
+            errorEl.classList.add('hidden');
+            hideAuthStatus();
+
+            if (!email) {
+                errorEl.textContent = "Saisissez d'abord votre adresse email ci-dessus pour recevoir le lien de réinitialisation.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            const redirectUrl = window.location.href.startsWith('http') ? window.location.href.split('#')[0] : undefined;
+            const { error } = await supabaseClient.auth.resetPasswordForEmail(email, redirectUrl ? { redirectTo: redirectUrl } : undefined);
+
+            if (error) {
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+            } else {
+                showAuthStatus(`Un e-mail de réinitialisation de mot de passe a été envoyé à ${email}. Ouvrez le lien reçu pour définir un nouveau mot de passe.`, 'verify');
+                showToast("E-mail de réinitialisation envoyé.");
+            }
+        }
+
+        function toggleAuthMode() {
+            isSignUpMode = !isSignUpMode;
+            document.getElementById('auth-error').classList.add('hidden');
+            hideAuthStatus();
+            document.getElementById('auth-subtitle').textContent = isSignUpMode
+                ? "Créez votre compte personnel"
+                : "Connectez-vous pour synchroniser votre bibliothèque";
+            document.getElementById('auth-submit-btn').textContent = isSignUpMode ? "Créer un compte" : "Se connecter";
+            document.getElementById('auth-toggle-btn').textContent = isSignUpMode
+                ? "Déjà un compte ? Se connecter"
+                : "Pas encore de compte ? Créer un compte";
+        }
+
+        async function handleAuthSubmit(event) {
+            event.preventDefault();
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            const errorEl = document.getElementById('auth-error');
+            const submitBtn = document.getElementById('auth-submit-btn');
+            errorEl.classList.add('hidden');
+            hideAuthStatus();
+
+            submitBtn.disabled = true;
+            const originalBtnText = submitBtn.textContent;
+            submitBtn.textContent = isSignUpMode ? "Création en cours..." : "Connexion en cours...";
+
+            try {
+                if (isSignUpMode) {
+                    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+                    if (error) {
+                        errorEl.textContent = error.message;
+                        errorEl.classList.remove('hidden');
+                    } else if (data?.session) {
+                        showAuthStatus("Authentification réussie ! Ouverture de votre bibliothèque...", 'success');
+                        showToast("Authentification réussie !");
+                    } else {
+                        showAuthStatus(`Un e-mail de vérification a été envoyé à ${email}. Cliquez sur le lien reçu dans votre boîte mail, puis revenez ici pour vous connecter.`, 'verify');
+                        showToast("E-mail de vérification envoyé.");
+                    }
+                } else {
+                    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                    if (error) {
+                        errorEl.textContent = error.message;
+                        errorEl.classList.remove('hidden');
+                    } else {
+                        showAuthStatus("Authentification réussie ! Connexion en cours...", 'success');
+                        showToast("Authentification réussie !");
+                    }
+                }
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalBtnText;
+            }
+        }
+
+        async function signOutUser() {
+            await supabaseClient.auth.signOut();
+            books = [];
+            document.body.style.backgroundImage = DEFAULT_BG_IMAGE;
+            updateTotalGrimoiresFooter();
+            renderLibrary();
+            renderTimeline();
+        }
+
+        async function handleSessionChange(session) {
+            currentUser = session ? session.user : null;
+            const authScreen = document.getElementById('auth-screen');
+            if (!currentUser) {
+                authScreen.classList.remove('hidden');
+                return;
+            }
+
+            const meta = currentUser.user_metadata || {};
+            const initialNextReads = normalizeNextReadIds(meta.next_read_ids);
+            if (initialNextReads.length > 0 && !localStorage.getItem(getHiddenNextReadsKey())) {
+                localStorage.setItem(getHiddenNextReadsKey(), JSON.stringify(initialNextReads));
+            }
+
+            if (meta && !localStorage.getItem(getProfileStorageKey()) && (meta.display_name || meta.reader_title || meta.next_read_ids)) {
+                localStorage.setItem(getProfileStorageKey(), JSON.stringify({
+                    displayName: meta.display_name || currentUser.email.split('@')[0],
+                    title: meta.reader_title || 'Voyageur des mondes',
+                    favoriteGenres: meta.favorite_genres || '',
+                    bio: meta.bio || '',
+                    avatar: '',
+                    banner: '',
+                    pageBg: '',
+                    nextReadIds: initialNextReads,
+                    journalPosts: [],
+                    sortMode: 'title',
+                    manualBookOrder: []
+                }));
+            }
+
+            loadUserProfile();
+            showAuthStatus("Authentification réussie ! Chargement de votre bibliothèque...", 'success');
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            authScreen.classList.add('hidden');
+            hideAuthStatus();
+
+            books = await db.books.where('userId').equals(currentUser.id).toArray();
+            renderAccountHeader();
+            renderProfilePage();
             populateFilters();
             renderLibrary();
             renderTimeline();
-        });
-
-        // Gestion du panneau Spotify
-        function toggleSpotifyDrawer() {
-            const drawer = document.getElementById('spotify-drawer');
-            drawer.classList.toggle('closed');
+            await syncWithCloud(false);
         }
 
-        async function initDatabase() {
-            const count = await db.books.count();
-            if (count === 0) {
-                await db.books.bulkAdd(defaultBooks);
+        async function saveLocalBook(book) {
+            if (!currentUser) return;
+            book.userId = currentUser.id;
+            if (!book.addedAt) book.addedAt = new Date().toISOString();
+            if (typeof book.readCount !== 'number') book.readCount = Number(book.readCount) || 0;
+            if (typeof book.completionCount !== 'number') book.completionCount = Number(book.completionCount) || (book.endDate ? 1 : 0);
+            if (typeof book.isRereading !== 'boolean') book.isRereading = Boolean(book.isRereading);
+            await db.books.put(book);
+            books = await db.books.where('userId').equals(currentUser.id).toArray();
+            if (!(userProfile.manualBookOrder || []).includes(book.id)) {
+                userProfile.manualBookOrder = [...(userProfile.manualBookOrder || []), book.id];
+                localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
             }
-            books = await db.books.toArray();
+            renderAccountHeader();
+            renderProfileSideSections();
+            populateJournalBookSelect();
         }
 
-        async function saveBooksToStorage() {
-            await db.books.clear();
-            await db.books.bulkAdd(books);
+        async function pushBookToCloud(book) {
+            if (!currentUser) return;
+            const { error } = await supabaseClient.from('books').upsert({
+                id: book.id,
+                user_id: currentUser.id,
+                title: book.title,
+                author: book.author || "Auteur Inconnu",
+                genre: book.genre || "Fantasy",
+                saga: book.saga || "",
+                tome: book.tome || 1,
+                isbn: book.isbn || "Non répertorié",
+                cover: book.cover || DEFAULT_COVER,
+                description: book.description || "",
+                start_date: book.startDate || "",
+                end_date: book.endDate || "",
+                comment: book.comment || "",
+                is_epub: Boolean(hasEpubFormat(book)),
+                saved_spread_index: book.savedSpreadIndex || 0,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+            if (error) console.error("Erreur sauvegarde auto cloud:", error);
+        }
+
+        async function autoSaveBook(book) {
+            await saveLocalBook(book);
+            await pushBookToCloud(book);
+        }
+
+        async function syncWithCloud(showFeedback = false) {
+            if (!currentUser) return;
+            const { data: remoteRows, error } = await supabaseClient.from('books').select('*').eq('user_id', currentUser.id);
+            if (error) {
+                console.error("Erreur lecture cloud:", error);
+                return;
+            }
+
+            const localById = new Map(books.map(b => [b.id, b]));
+            const merged = [];
+
+            for (const row of (remoteRows || [])) {
+                const local = localById.get(row.id);
+                merged.push({
+                    id: row.id,
+                    userId: currentUser.id,
+                    title: row.title,
+                    author: row.author || "Auteur Inconnu",
+                    genre: row.genre || "Fantasy",
+                    saga: row.saga || "",
+                    tome: row.tome || 1,
+                    isbn: row.isbn || "Non répertorié",
+                    cover: row.cover || DEFAULT_COVER,
+                    description: row.description || "",
+                    startDate: row.start_date || "",
+                    endDate: row.end_date || "",
+                    comment: row.comment || "",
+                    isEpub: Boolean(row.is_epub || local?.fileBlob),
+                    fileBlob: local?.fileBlob || null,
+                    savedSpreadIndex: row.saved_spread_index || 0,
+                    readCount: Number(local?.readCount) || 0,
+                    completionCount: Number(local?.completionCount) || (row.end_date ? 1 : 0),
+                    isRereading: Boolean(local?.isRereading),
+                    addedAt: local?.addedAt || row.created_at || row.updated_at || new Date(Number(row.id) || Date.now()).toISOString()
+                });
+                localById.delete(row.id);
+            }
+
+            for (const localOnly of localById.values()) {
+                merged.push({
+                    ...localOnly,
+                    readCount: Number(localOnly.readCount) || 0,
+                    completionCount: Number(localOnly.completionCount) || (localOnly.endDate ? 1 : 0),
+                    isRereading: Boolean(localOnly.isRereading),
+                    addedAt: localOnly.addedAt || new Date(Number(localOnly.id) || Date.now()).toISOString()
+                });
+                await pushBookToCloud(localOnly);
+            }
+
+            await db.books.where('userId').equals(currentUser.id).delete();
+            if (merged.length > 0) await db.books.bulkPut(merged);
+            books = await db.books.where('userId').equals(currentUser.id).toArray();
+
+            renderAccountHeader();
+            renderProfilePage();
+            populateFilters();
+            renderLibrary();
+            renderTimeline();
+            if (showFeedback) showToast("Bibliothèque sauvegardée.");
+        }
+
+        function openCreateBookModal() {
+            uploadedNewBookCoverDataUrl = null;
+            document.getElementById('create-book-form').reset();
+            document.getElementById('new-book-tome').value = 1;
+            document.getElementById('new-book-read-count').value = '';
+            document.getElementById('new-book-rereading').checked = false;
+            document.getElementById('new-book-cover-preview').src = DEFAULT_COVER;
+            document.getElementById('create-book-modal').classList.remove('hidden');
+        }
+
+        function previewNewBookCover(event) {
+            readFileDataUrl(event.target.files[0], (res) => {
+                uploadedNewBookCoverDataUrl = res;
+                document.getElementById('new-book-cover-preview').src = res;
+            });
+        }
+
+        function previewNewBookCoverUrl(event) {
+            if (!uploadedNewBookCoverDataUrl) {
+                document.getElementById('new-book-cover-preview').src = event.target.value.trim() || DEFAULT_COVER;
+            }
+        }
+
+        async function handleCreateBookSubmit(event) {
+            event.preventDefault();
+            if (!currentUser) return;
+            const title = document.getElementById('new-book-title').value.trim();
+            if (!title) return;
+
+            const endDateVal = document.getElementById('new-book-end-date').value || "";
+            const readCountVal = Math.max(0, parseInt(document.getElementById('new-book-read-count').value, 10) || 0);
+            const isRereadingVal = document.getElementById('new-book-rereading').checked;
+
+            const newBookObj = {
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                userId: currentUser.id,
+                title,
+                author: document.getElementById('new-book-author').value.trim() || "Auteur Inconnu",
+                genre: document.getElementById('new-book-genre').value.trim() || "Journal",
+                saga: document.getElementById('new-book-saga').value.trim() || "",
+                tome: parseFloat(document.getElementById('new-book-tome').value) || 1,
+                isbn: document.getElementById('new-book-isbn').value.trim() || "Non répertorié",
+                cover: uploadedNewBookCoverDataUrl || document.getElementById('new-book-cover-url').value.trim() || DEFAULT_COVER,
+                description: document.getElementById('new-book-description').value.trim() || "Aucune description fournie.",
+                startDate: document.getElementById('new-book-start-date').value || "",
+                endDate: endDateVal,
+                comment: document.getElementById('new-book-comment').value.trim() || "",
+                readCount: readCountVal,
+                completionCount: Math.max(readCountVal, endDateVal ? 1 : 0),
+                isRereading: isRereadingVal,
+                isEpub: false,
+                fileBlob: null,
+                savedSpreadIndex: 0,
+                addedAt: new Date().toISOString()
+            };
+
+            await autoSaveBook(newBookObj);
+            populateFilters();
+            renderLibrary();
+            renderTimeline();
+            closeCreateBookModal();
+            showToast(`"${title}" ajouté et sauvegardé automatiquement !`);
         }
 
         async function getDominantColor(imgSrc) {
@@ -421,94 +1841,68 @@
                         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                         const colorCounts = {};
-
                         for (let i = 0; i < data.length; i += 16) {
-                            const r = data[i];
-                            const g = data[i+1];
-                            const b = data[i+2];
-
+                            const r = data[i], g = data[i + 1], b = data[i + 2];
                             const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                            const max = Math.max(r, g, b);
-                            const min = Math.min(r, g, b);
+                            const max = Math.max(r, g, b), min = Math.min(r, g, b);
                             const saturation = max === 0 ? 0 : (max - min) / max;
-
-                            if (brightness > 120 || saturation < 0.2) continue; 
-
-                            const qr = Math.round(r / 30) * 30;
-                            const qg = Math.round(g / 30) * 30;
-                            const qb = Math.round(b / 30) * 30;
-                            const rgbKey = `${qr},${qg},${qb}`;
-
-                            colorCounts[rgbKey] = (colorCounts[rgbKey] || 0) + 1;
+                            if (brightness > 120 || saturation < 0.2) continue;
+                            const key = `${Math.round(r / 30) * 30},${Math.round(g / 30) * 30},${Math.round(b / 30) * 30}`;
+                            colorCounts[key] = (colorCounts[key] || 0) + 1;
                         }
-
-                        const sortedColors = Object.keys(colorCounts).sort((a, b) => colorCounts[b] - colorCounts[a]);
-
-                        if (sortedColors.length > 0) {
-                            resolve(`rgb(${sortedColors[0]})`);
-                        } else {
-                            resolve('rgb(51, 26, 26)');
-                        }
-                    } catch (e) {
-                        resolve('rgb(51, 26, 26)');
+                        const sorted = Object.keys(colorCounts).sort((a, b) => colorCounts[b] - colorCounts[a]);
+                        resolve(sorted.length > 0 ? `rgb(${sorted[0]})` : 'rgb(61, 35, 20)');
+                    } catch (_e) {
+                        resolve('rgb(61, 35, 20)');
                     }
                 };
-                img.onerror = () => resolve('rgb(51, 26, 26)');
+                img.onerror = () => resolve('rgb(61, 35, 20)');
             });
         }
 
         function lightenRgb(rgbString, percent) {
             const match = rgbString.match(/\d+/g);
-            if (!match) return '#331a1a';
-            let [r, g, b] = match.map(Number);
-            r = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
-            g = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
-            b = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+            if (!match) return '#3d2314';
+            const [r, g, b] = match.map(n => Math.min(255, Math.floor(Number(n) + (255 - Number(n)) * (percent / 100))));
             return `rgb(${r}, ${g}, ${b})`;
         }
 
         async function handleEpubImports(event) {
+            if (!currentUser) return;
             const files = event.target.files;
-            if (!files || files.length === 0) return;
+            if (!files?.length) return;
 
-            showToast(`Magie de Noël : extraction de ${files.length} EPUB(s)...`);
+            showToast(`Importation de ${files.length} EPUB(s)...`);
+            const parser = new DOMParser();
 
-            for (let file of files) {
+            for (const file of files) {
                 try {
-                    const zip = new JSZip();
-                    const zipContent = await zip.loadAsync(file);
+                    const arrayBuffer = await file.arrayBuffer();
+                    const zipContent = await new JSZip().loadAsync(arrayBuffer);
 
-                    const containerFile = zipContent.file("META-INF/container.xml");
-                    if (!containerFile) continue;
-                    const containerText = await containerFile.async("text");
-                    const parser = new DOMParser();
-                    const containerXml = parser.parseFromString(containerText, "text/xml");
-                    const rootfileElement = containerXml.querySelector("rootfile");
-                    if (!rootfileElement) continue;
+                    const containerText = await zipContent.file("META-INF/container.xml")?.async("text");
+                    if (!containerText) continue;
+                    const opfPath = parser.parseFromString(containerText, "text/xml").querySelector("rootfile")?.getAttribute("full-path");
+                    if (!opfPath) continue;
+                    const opfText = await zipContent.file(opfPath)?.async("text");
+                    if (!opfText) continue;
 
-                    const opfPath = rootfileElement.getAttribute("full-path");
-                    const opfFile = zipContent.file(opfPath);
-                    if (!opfFile) continue;
-
-                    const opfText = await opfFile.async("text");
                     const opfXml = parser.parseFromString(opfText, "text/xml");
-
                     const getMetaText = (selectors) => {
-                        for (let sel of selectors) {
-                            const el = opfXml.querySelector(sel);
-                            if (el && el.textContent.trim()) return el.textContent.trim();
+                        for (const sel of selectors) {
+                            const txt = opfXml.querySelector(sel)?.textContent.trim();
+                            if (txt) return txt;
                         }
                         return "";
                     };
 
                     const title = getMetaText(["title", "dc\\:title", "[name='dc:title']"]) || file.name.replace(/\.[^/.]+$/, "");
                     const author = getMetaText(["creator", "dc\\:creator", "[name='dc:creator']"]) || "Auteur Inconnu";
-                    const description = getMetaText(["description", "dc\\:description", "[name='dc:description']"]) || "Aucune description fournie dans cet EPUB.";
-                    let genre = getMetaText(["subject", "dc\\:subject", "[name='dc:subject']"]) || "Fantasy";
+                    const description = getMetaText(["description", "dc\\:description", "[name='dc:description']"]) || "Aucune description fournie.";
+                    const genre = getMetaText(["subject", "dc\\:subject", "[name='dc:subject']"]) || "Fantasy";
 
                     let isbn = "";
-                    const identifiers = opfXml.querySelectorAll("identifier, dc\\:identifier, [name='dc:identifier']");
-                    for (let idEl of identifiers) {
+                    for (const idEl of opfXml.querySelectorAll("identifier, dc\\:identifier, [name='dc:identifier']")) {
                         const txt = idEl.textContent.trim();
                         const scheme = (idEl.getAttribute("opf:scheme") || idEl.getAttribute("scheme") || "").toLowerCase();
                         if (scheme.includes("isbn") || txt.replace(/[-\s]/g, "").length >= 10) {
@@ -516,33 +1910,18 @@
                             if (scheme.includes("isbn")) break;
                         }
                     }
-                    isbn = isbn || "Non répertorié";
-
-                    let sagaName = "";
-                    let tomeNumberExtracted = 1;
 
                     const seriesMeta = opfXml.querySelector("[name='calibre:series'], [property='belongs-to-collection'], series");
                     const seriesIndexMeta = opfXml.querySelector("[name='calibre:series_index'], [property='group-position'], volume");
+                    const sagaName = seriesMeta ? (seriesMeta.textContent.trim() || seriesMeta.getAttribute("content") || "") : "";
+                    const idxVal = seriesIndexMeta ? parseFloat(seriesIndexMeta.textContent.trim() || seriesIndexMeta.getAttribute("content")) : NaN;
 
-                    if (seriesMeta) {
-                        sagaName = seriesMeta.textContent.trim() || seriesMeta.getAttribute("content");
-                    }
-
-                    if (seriesIndexMeta) {
-                        const idxVal = parseFloat(seriesIndexMeta.textContent.trim() || seriesIndexMeta.getAttribute("content"));
-                        if (!isNaN(idxVal)) tomeNumberExtracted = idxVal;
-                    }
-
-                    let coverDataUrl = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400";
-                    let coverItem = opfXml.querySelector("item[properties*='cover-image']") || 
-                                    opfXml.querySelector("item[id*='cover' i], item[href*='cover' i]");
-
+                    let coverDataUrl = DEFAULT_COVER;
+                    const coverItem = opfXml.querySelector("item[properties*='cover-image']") || opfXml.querySelector("item[id*='cover' i], item[href*='cover' i]");
                     if (coverItem) {
-                        let coverHref = coverItem.getAttribute("href");
+                        const coverHref = coverItem.getAttribute("href");
                         const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
-                        const fullCoverPath = opfDir + coverHref;
-
-                        const imageFile = zipContent.file(fullCoverPath) || zipContent.file(coverHref);
+                        const imageFile = zipContent.file(opfDir + coverHref) || zipContent.file(coverHref);
                         if (imageFile) {
                             const imageBlob = await imageFile.async("blob");
                             coverDataUrl = await new Promise((resolve) => {
@@ -553,42 +1932,38 @@
                         }
                     }
 
-                    const existingIndex = books.findIndex(b => b.title.toLowerCase() === title.toLowerCase() && b.author.toLowerCase() === author.toLowerCase());
-                    const newBookObj = {
-                        id: books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1,
-                        title: title,
-                        author: author,
-                        genre: genre,
+                    const existingBook = books.find(b => b.title.toLowerCase() === title.toLowerCase() && b.author.toLowerCase() === author.toLowerCase());
+                    await autoSaveBook({
+                        id: existingBook ? existingBook.id : (Date.now() + Math.floor(Math.random() * 1000)),
+                        userId: currentUser.id,
+                        title,
+                        author,
+                        genre,
                         saga: sagaName,
-                        tome: tomeNumberExtracted,
-                        isbn: isbn,
+                        tome: !isNaN(idxVal) ? idxVal : 1,
+                        isbn: isbn || "Non répertorié",
                         cover: coverDataUrl,
-                        description: description,
-                        startDate: "",
-                        endDate: "",
-                        comment: "",
-                        filePath: file.name
-                    };
-
-                    if (existingIndex >= 0) {
-                        newBookObj.startDate = books[existingIndex].startDate;
-                        newBookObj.endDate = books[existingIndex].endDate;
-                        newBookObj.comment = books[existingIndex].comment;
-                        books[existingIndex] = newBookObj;
-                    } else {
-                        books.push(newBookObj);
-                    }
-
+                        description,
+                        startDate: existingBook?.startDate || "",
+                        endDate: existingBook?.endDate || "",
+                        comment: existingBook?.comment || "",
+                        readCount: existingBook?.readCount || 0,
+                        completionCount: existingBook?.completionCount || (existingBook?.endDate ? 1 : 0),
+                        isRereading: existingBook?.isRereading || false,
+                        isEpub: true,
+                        fileBlob: arrayBuffer,
+                        savedSpreadIndex: existingBook?.savedSpreadIndex || 0,
+                        addedAt: existingBook?.addedAt || new Date().toISOString()
+                    });
                 } catch (err) {
-                    console.error("Erreur lors de l'extraction de l'EPUB:", err);
+                    console.error("Erreur d'importation EPUB:", err);
                 }
             }
 
-            await saveBooksToStorage();
             populateFilters();
             renderLibrary();
             renderTimeline();
-            showToast("Grimoire ajouté sous le sapin !");
+            showToast("Grimoire importé et sauvegardé automatiquement !");
             event.target.value = '';
         }
 
@@ -596,112 +1971,150 @@
             const container = document.getElementById('shelves-container');
             container.innerHTML = '';
 
+            const isManualMode = (userProfile.sortMode || document.getElementById('sort-select')?.value) === 'manual';
+            const manualHint = document.getElementById('manual-sort-hint');
+            if (manualHint) manualHint.classList.toggle('hidden', !isManualMode);
+
             const searchTerm = document.getElementById('search-input').value.toLowerCase();
             const genreFilter = document.getElementById('genre-filter').value;
             const sagaFilter = document.getElementById('saga-filter').value;
             const statusFilter = document.getElementById('status-filter').value;
 
-            const filteredBooks = books.filter(book => {
-                const matchesSearch = book.title.toLowerCase().includes(searchTerm) || 
-                                      book.author.toLowerCase().includes(searchTerm);
+            const matchingBooks = books.filter(book => {
+                const matchesSearch = book.title.toLowerCase().includes(searchTerm) || book.author.toLowerCase().includes(searchTerm);
                 const matchesGenre = !genreFilter || book.genre === genreFilter;
                 const matchesSaga = !sagaFilter || book.saga === sagaFilter;
-                
                 let matchesStatus = true;
-                if (statusFilter === 'finished') matchesStatus = Boolean(book.endDate);
-                else if (statusFilter === 'reading') matchesStatus = Boolean(book.startDate && !book.endDate);
-                else if (statusFilter === 'unread') matchesStatus = !book.startDate && !book.endDate;
-
+                if (statusFilter === 'rereading') matchesStatus = Boolean(book.isRereading);
+                else if (statusFilter === 'finished') matchesStatus = Boolean(book.endDate && !book.isRereading);
+                else if (statusFilter === 'reading') matchesStatus = Boolean(book.startDate && !book.endDate && !book.isRereading);
+                else if (statusFilter === 'unread') matchesStatus = !book.startDate && !book.endDate && !book.isRereading;
                 return matchesSearch && matchesGenre && matchesSaga && matchesStatus;
-            }).sort((a, b) => {
-                const authorComp = a.author.localeCompare(b.author, 'fr', { sensitivity: 'base' });
-                if (authorComp !== 0) return authorComp;
-                return a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' });
             });
 
+            const filteredBooks = getSortedBooks(matchingBooks);
+            updateTotalGrimoiresFooter();
+
             if (filteredBooks.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-leather/40 p-12 rounded-3xl text-center border border-crimson/40 flex flex-col items-center gap-4">
-                        <i class="fa-solid fa-mitten text-goldLeaf text-4xl"></i>
-                        <p class="text-parchment font-lora">Aucun grimoire trouvé sous la neige.</p>
-                    </div>
-                `;
+                container.innerHTML = `<div class="bg-leather/40 p-12 rounded-3xl text-center border border-goldLeaf/30 flex flex-col items-center gap-4"><i class="fa-solid fa-ghost text-goldLeaf text-4xl"></i><p class="text-parchment font-lora">Aucun grimoire présent dans la bibliothèque.</p></div>`;
                 return;
             }
 
-            // Fixé à 15 livres max par étagère
             const chunkSize = 15;
             for (let i = 0; i < filteredBooks.length; i += chunkSize) {
                 const shelfItems = filteredBooks.slice(i, i + chunkSize);
-                
                 const shelfWrapper = document.createElement('div');
                 shelfWrapper.className = 'flex flex-col gap-2';
-
                 const shelfSpineRow = document.createElement('div');
                 shelfSpineRow.className = 'shelf-row';
 
-                for (let book of shelfItems) {
+                for (const book of shelfItems) {
                     const spine = document.createElement('div');
-                    spine.className = `book-spine h-56 w-12 rounded-t-lg border-x border-goldLeaf/50 shadow-2xl flex flex-col items-center justify-between py-3 px-0.5 relative group`;
-                    spine.style.backgroundColor = '#331a1a';
+                    spine.className = `book-spine h-52 sm:h-56 w-11 sm:w-12 rounded-t-lg border-x border-goldLeaf/50 shadow-2xl flex flex-col items-center justify-between py-2.5 sm:py-3 px-0.5 relative group ${isManualMode ? 'manual-draggable' : ''}`;
+                    spine.draggable = isManualMode;
+                    spine.style.backgroundColor = '#3d2314';
+                    getDominantColor(book.cover).then(color => { spine.style.backgroundColor = color; });
 
-                    getDominantColor(book.cover).then(color => {
-                        spine.style.backgroundColor = color;
-                    });
-
+                    const spineTopLabel = book.saga ? `Tome ${book.tome || 1}` : (hasEpubFormat(book) ? 'Roman' : 'Journal');
                     spine.innerHTML = `
-                        <div class="text-[9px] text-goldLeaf font-cinzel font-bold tracking-wider uppercase whitespace-nowrap text-center drop-shadow">${book.saga ? `Tome ${book.tome || 1}` : 'Roman'}</div>
-                        <div class="text-[9.5px] text-parchment font-cinzel font-bold tracking-wider w-full text-center my-auto px-0.5 drop-shadow" style="display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${escapeHtml(book.title)}</div>
-                        <div class="text-[8px] text-parchment/90 font-lora truncate w-full text-center drop-shadow">${escapeHtml(book.author)}</div>
-
-                        <div class="absolute top-0 left-full ml-2 w-36 aspect-[2/3] bg-leatherDark rounded-xl shadow-2xl border-2 border-goldLeaf p-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 z-40">
+                        <div class="text-[8.5px] sm:text-[9px] text-goldLeaf font-cinzel font-bold tracking-wider uppercase whitespace-nowrap text-center drop-shadow">${spineTopLabel}</div>
+                        <div class="text-[9px] sm:text-[9.5px] text-parchment font-cinzel font-bold tracking-wider w-full text-center my-auto px-0.5 drop-shadow" style="display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${escapeHtml(book.title)}</div>
+                        <div class="text-[7.5px] sm:text-[8px] text-parchment/90 font-lora truncate w-full text-center drop-shadow">${escapeHtml(book.author)}</div>
+                        <div class="hidden md:block absolute top-0 left-full ml-2 w-36 aspect-[2/3] bg-leatherDark rounded-xl shadow-2xl border-2 border-goldLeaf p-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 z-40">
                             <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-full h-full object-contain rounded-lg bg-black/40" onerror="this.src='https://placehold.co/300x450/4a2511/d4af37?text=Couverture'">
                         </div>
                     `;
 
                     spine.addEventListener('mouseenter', () => {
+                        if (window.innerWidth < 768 || draggedBookId !== null) return;
                         spine.classList.add('is-hovered');
                         const allSpines = Array.from(shelfSpineRow.children);
-                        const currentIndex = allSpines.indexOf(spine);
-                        for (let j = currentIndex + 1; j < allSpines.length; j++) {
-                            allSpines[j].classList.add('shift-right');
-                        }
+                        const idx = allSpines.indexOf(spine);
+                        for (let j = idx + 1; j < allSpines.length; j++) allSpines[j].classList.add('shift-right');
                     });
 
                     spine.addEventListener('mouseleave', () => {
                         spine.classList.remove('is-hovered');
-                        const allSpines = Array.from(shelfSpineRow.children);
-                        allSpines.forEach(s => s.classList.remove('shift-right'));
+                        Array.from(shelfSpineRow.children).forEach(s => s.classList.remove('shift-right'));
                     });
 
-                    spine.onclick = () => openBookModal(book.id);
+                    if (isManualMode) {
+                        spine.addEventListener('dragstart', (e) => {
+                            draggedBookId = book.id;
+                            spine.classList.add('dragging');
+                            Array.from(shelfSpineRow.children).forEach(s => s.classList.remove('shift-right'));
+                            if (e.dataTransfer) {
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', String(book.id));
+                            }
+                        });
+
+                        spine.addEventListener('dragover', (e) => {
+                            e.preventDefault();
+                            if (draggedBookId !== null && draggedBookId !== book.id) {
+                                spine.classList.add('drag-target');
+                            }
+                        });
+
+                        spine.addEventListener('dragleave', () => {
+                            spine.classList.remove('drag-target');
+                        });
+
+                        spine.addEventListener('drop', async (e) => {
+                            e.preventDefault();
+                            spine.classList.remove('drag-target');
+                            const sourceId = draggedBookId ?? Number(e.dataTransfer?.getData('text/plain'));
+                            draggedBookId = null;
+                            if (!sourceId || sourceId === book.id) return;
+
+                            syncManualOrderWithBooks();
+                            const order = [...userProfile.manualBookOrder];
+                            const fromIdx = order.indexOf(sourceId);
+                            const toIdx = order.indexOf(book.id);
+                            if (fromIdx === -1 || toIdx === -1) return;
+
+                            const [moved] = order.splice(fromIdx, 1);
+                            order.splice(toIdx, 0, moved);
+                            userProfile.manualBookOrder = order;
+                            localStorage.setItem(getProfileStorageKey(), JSON.stringify(userProfile));
+                            await renderLibrary();
+                            showToast("Ordre manuel enregistré !");
+                        });
+
+                        spine.addEventListener('dragend', () => {
+                            draggedBookId = null;
+                            spine.classList.remove('dragging', 'drag-target');
+                            document.querySelectorAll('.book-spine.drag-target').forEach(el => el.classList.remove('drag-target'));
+                        });
+                    }
+
+                    spine.onclick = () => {
+                        if (draggedBookId !== null) return;
+                        openBookModal(book.id);
+                    };
                     shelfSpineRow.appendChild(spine);
                 }
 
                 shelfWrapper.appendChild(shelfSpineRow);
-
-                // Planche en bois avec guirlande lumineuse de Noël
                 const woodPlank = document.createElement('div');
-                woodPlank.className = 'wood-shelf h-6 w-full rounded-b-lg';
-                
-                woodPlank.innerHTML = `
-                    <div class="christmas-garland">
-                        <div class="garland-bulb bulb-red"></div>
-                        <div class="garland-bulb bulb-gold"></div>
-                        <div class="garland-bulb bulb-green"></div>
-                        <div class="garland-bulb bulb-blue"></div>
-                        <div class="garland-bulb bulb-red"></div>
-                        <div class="garland-bulb bulb-gold"></div>
-                        <div class="garland-bulb bulb-green"></div>
-                        <div class="garland-bulb bulb-blue"></div>
-                        <div class="garland-bulb bulb-red"></div>
-                        <div class="garland-bulb bulb-gold"></div>
-                    </div>
-                `;
-
+                woodPlank.className = 'wood-shelf h-5 sm:h-6 w-full rounded-b-lg';
                 shelfWrapper.appendChild(woodPlank);
-
                 container.appendChild(shelfWrapper);
+            }
+        }
+
+        function refreshModalReadCountDisplay(book) {
+            const row = document.getElementById('modal-read-count-row');
+            const valEl = document.getElementById('modal-read-count-value');
+            if (!row || !valEl || !book) return;
+
+            if (shouldDisplayReadCount(book)) {
+                valEl.textContent = String(getEffectiveReadCount(book));
+                row.classList.remove('hidden');
+                row.classList.add('flex');
+            } else {
+                row.classList.add('hidden');
+                row.classList.remove('flex');
             }
         }
 
@@ -713,52 +2126,57 @@
             document.getElementById('modal-title').textContent = book.title;
             document.getElementById('modal-author').textContent = `par ${book.author}`;
             document.getElementById('modal-isbn').textContent = book.isbn || "Non répertorié";
-            
+
             const genresContainer = document.getElementById('modal-genres-container');
             genresContainer.innerHTML = '';
-            const rawGenreStr = book.genre || "Fantasy";
-            rawGenreStr.split(',').forEach(g => {
+            (book.genre || "Fantasy").split(',').forEach(g => {
                 const clean = g.trim();
-                if (clean) {
-                    const badge = document.createElement('span');
-                    badge.className = "px-3 py-1 bg-black/30 text-goldLeaf border border-goldLeaf/40 rounded-full text-xs font-semibold tracking-wider uppercase";
-                    badge.textContent = clean;
-                    genresContainer.appendChild(badge);
-                }
+                if (!clean) return;
+                const badge = document.createElement('span');
+                badge.className = "px-2.5 py-1 bg-black/30 text-goldLeaf border border-goldLeaf/40 rounded-full text-[11px] font-semibold tracking-wider uppercase";
+                badge.textContent = clean;
+                genresContainer.appendChild(badge);
             });
 
-            const descEl = document.getElementById('modal-description');
-            descEl.textContent = book.description || "Aucune description détaillée n'est disponible pour cet ouvrage.";
-
+            document.getElementById('modal-description').textContent = book.description || "Aucune description fournie.";
             document.getElementById('modal-cover').src = book.cover;
-
             document.getElementById('input-start-date').value = book.startDate || '';
             document.getElementById('input-end-date').value = book.endDate || '';
+            document.getElementById('input-read-count').value = book.readCount > 0 ? String(book.readCount) : '';
+            document.getElementById('input-rereading').checked = Boolean(book.isRereading);
             document.getElementById('input-comment').value = book.comment || '';
 
+            refreshModalReadCountDisplay(book);
+            updateModalPalButton();
+            renderBookJournalEntries(book.id);
+
+            const readBtnWrapper = document.getElementById('modal-read-btn-wrapper');
+            if (hasEpubFormat(book)) {
+                readBtnWrapper.classList.remove('hidden');
+                let readLabel = "Commencer la lecture";
+                if (book.isRereading) readLabel = "Continuer la relecture";
+                else if (book.endDate) readLabel = "Relire";
+                else if (book.startDate || book.savedSpreadIndex > 0) readLabel = "Reprendre la lecture";
+                document.getElementById('modal-read-btn-text').textContent = readLabel;
+            } else {
+                readBtnWrapper.classList.add('hidden');
+            }
+
+            const lighterColor = lightenRgb(await getDominantColor(book.cover), 15);
             const modalBox = document.getElementById('modal-box');
-            modalBox.style.backgroundColor = '#251212';
-            const dominantRgb = await getDominantColor(book.cover);
-            const lighterColor = lightenRgb(dominantRgb, 15);
             modalBox.style.backgroundColor = lighterColor;
-            modalBox.style.backgroundImage = `radial-gradient(circle, ${lighterColor} 0%, #0d0606 100%)`;
+            modalBox.style.backgroundImage = `radial-gradient(circle, ${lighterColor} 0%, #150a06 100%)`;
 
             const sagaRow = document.getElementById('modal-saga-row');
-            const sagaInfo = document.getElementById('modal-saga-info');
             const sagaBooksContainer = document.getElementById('modal-saga-books');
             sagaBooksContainer.innerHTML = '';
 
             if (book.saga) {
                 sagaRow.style.display = 'flex';
-                sagaInfo.textContent = book.saga;
-
-                const sameSagaBooks = books.filter(b => b.saga === book.saga).sort((a, b) => (a.tome || 1) - (b.tome || 1));
-                
-                sameSagaBooks.forEach(sagaBook => {
+                document.getElementById('modal-saga-info').textContent = book.saga;
+                books.filter(b => b.saga === book.saga).sort((a, b) => (a.tome || 1) - (b.tome || 1)).forEach(sagaBook => {
                     const coverCard = document.createElement('div');
                     coverCard.className = `relative group cursor-pointer w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${sagaBook.id === book.id ? 'border-goldDark ring-2 ring-goldLeaf scale-105 shadow-lg' : 'border-goldLeaf/40 hover:scale-105 hover:border-goldLeaf shadow'}`;
-                    coverCard.title = `${sagaBook.title} (Tome ${sagaBook.tome || 1})`;
-                    
                     coverCard.innerHTML = `
                         <img src="${sagaBook.cover}" alt="${escapeHtml(sagaBook.title)}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/100x150/4a2511/d4af37?text=Cover'">
                         <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1 text-center">
@@ -770,15 +2188,10 @@
                 });
             } else {
                 sagaRow.style.display = 'none';
-                sagaBooksContainer.innerHTML = '<span class="text-xs text-parchment/60 italic">Ce grimoire n\'appartient à aucune saga répertoriée.</span>';
+                sagaBooksContainer.innerHTML = '<span class="text-xs text-parchment/60 italic">Ce grimoire n\'appartient à aucune saga.</span>';
             }
 
             document.getElementById('book-modal').classList.remove('hidden');
-        }
-
-        function closeBookModal() {
-            document.getElementById('book-modal').classList.add('hidden');
-            currentSelectedBookId = null;
         }
 
         async function saveBookProgress() {
@@ -788,69 +2201,335 @@
 
             book.startDate = document.getElementById('input-start-date').value;
             book.endDate = document.getElementById('input-end-date').value;
+            book.readCount = Math.max(0, parseInt(document.getElementById('input-read-count').value, 10) || 0);
+            book.isRereading = document.getElementById('input-rereading').checked;
+            if (book.endDate && (Number(book.completionCount) || 0) < 1) {
+                book.completionCount = 1;
+            }
             book.comment = document.getElementById('input-comment').value;
 
-            await saveBooksToStorage();
+            await autoSaveBook(book);
             renderLibrary();
             renderTimeline();
-            showToast("Notes de lecture sauvegardées !");
+            showToast("Notes sauvegardées automatiquement !");
             closeBookModal();
         }
 
         async function deleteCurrentBook() {
-            if (!currentSelectedBookId) return;
-            const bookIndex = books.findIndex(b => b.id === currentSelectedBookId);
-            if (bookIndex === -1) return;
+            if (!currentSelectedBookId || !currentUser) return;
+            const book = books.find(b => b.id === currentSelectedBookId);
+            if (!book || !confirm(`Voulez-vous supprimer "${book.title}" ?`)) return;
 
-            const bookTitle = books[bookIndex].title;
-            if (confirm(`Voulez-vous retirer "${bookTitle}" de la bibliothèque ?`)) {
-                books.splice(bookIndex, 1);
-                await saveBooksToStorage();
-                populateFilters();
-                renderLibrary();
-                renderTimeline();
-                closeBookModal();
-                showToast(`"${bookTitle}" retiré.`);
+            await db.books.delete(book.id);
+            await supabaseClient.from('books').delete().eq('id', book.id).eq('user_id', currentUser.id);
+            books = books.filter(b => b.id !== book.id);
+            userProfile.manualBookOrder = (userProfile.manualBookOrder || []).filter(id => id !== book.id);
+            const currentPal = normalizeNextReadIds(userProfile.nextReadIds);
+            if (currentPal.includes(Number(book.id))) {
+                userProfile.nextReadIds = currentPal.filter(id => id !== Number(book.id));
+            }
+            await saveUserProfile();
+            renderAccountHeader();
+            renderProfileSideSections();
+            populateJournalBookSelect();
+            populateFilters();
+            renderLibrary();
+            renderTimeline();
+            closeBookModal();
+            showToast(`"${book.title}" supprimé.`);
+        }
+
+        async function launchReader() {
+            const book = books.find(b => b.id === currentSelectedBookId);
+            if (!book || !hasEpubFormat(book)) return;
+            if (!book.fileBlob) {
+                showToast("Fichier EPUB absent sur cet appareil : réimportez l'EPUB ici pour lire.");
+                return;
+            }
+
+            if (book.endDate && !book.isRereading) {
+                book.isRereading = true;
+                book.savedSpreadIndex = 0;
+                book.startDate = new Date().toISOString().split('T')[0];
+                await autoSaveBook(book);
+                showToast("Relecture lancée ! Le livre apparaît dans l'onglet Relecture.");
+            }
+
+            currentReadingBookId = book.id;
+            closeBookModal();
+            document.getElementById('reader-book-title').textContent = book.title;
+            document.getElementById('reader-modal').classList.remove('hidden');
+            document.getElementById('page-left').innerHTML = '<div class="p-6 text-center italic">Mise en page du grimoire...</div>';
+            document.getElementById('page-right').innerHTML = '';
+            document.getElementById('toc-list').innerHTML = '';
+
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            await repaginateCurrentBook();
+            currentSpreadIndex = book.savedSpreadIndex || 0;
+            await renderSpread();
+        }
+
+        function splitTextNodeIntoPages(sandbox, currentHtml, element, pageHeight, chapterTitle) {
+            const words = (element.textContent || "").split(/\s+/);
+            const tagName = element.tagName.toLowerCase();
+            let tempWords = [];
+
+            for (const w of words) {
+                const candidateWords = [...tempWords, w];
+                const candidateHtml = `<${tagName}>${escapeHtml(candidateWords.join(' '))}</${tagName}>`;
+                sandbox.innerHTML = currentHtml + candidateHtml;
+
+                if (sandbox.scrollHeight > pageHeight) {
+                    if (tempWords.length > 0) {
+                        pagesArray.push({
+                            html: `${currentHtml}<${tagName}>${escapeHtml(tempWords.join(' '))}</${tagName}>`,
+                            chapterTitle
+                        });
+                        currentHtml = '';
+                        tempWords = [w];
+                    } else {
+                        pagesArray.push({ html: candidateHtml, chapterTitle });
+                        currentHtml = '';
+                        tempWords = [];
+                    }
+                } else {
+                    tempWords = candidateWords;
+                }
+            }
+
+            if (tempWords.length > 0) {
+                currentHtml += `<${tagName}>${escapeHtml(tempWords.join(' '))}</${tagName}>`;
+            }
+            return currentHtml;
+        }
+
+        async function repaginateCurrentBook() {
+            const book = books.find(b => b.id === currentReadingBookId);
+            if (!book?.fileBlob) return;
+
+            const sandbox = document.getElementById('calc-sandbox');
+            const pageLeftEl = document.getElementById('page-left');
+            const style = window.getComputedStyle(pageLeftEl);
+            const step = getPagesPerStep();
+
+            sandbox.style.width = `${Math.max(220, pageLeftEl.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight))}px`;
+            sandbox.style.height = 'auto';
+            const pageRefHeight = Math.max(260, pageLeftEl.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+
+            try {
+                const zipContent = await new JSZip().loadAsync(book.fileBlob);
+                const parser = new DOMParser();
+                const containerText = await zipContent.file("META-INF/container.xml").async("text");
+                const opfPath = parser.parseFromString(containerText, "text/xml").querySelector("rootfile").getAttribute("full-path");
+                const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+                const opfXml = parser.parseFromString(await zipContent.file(opfPath).async("text"), "text/xml");
+
+                const imageMap = {};
+                const itemById = {};
+                for (const item of opfXml.querySelectorAll("manifest > item")) {
+                    const id = item.getAttribute("id");
+                    const href = item.getAttribute("href");
+                    itemById[id] = href;
+                    if ((item.getAttribute("media-type") || "").startsWith("image/")) {
+                        const fileInZip = zipContent.file(opfDir + href) || zipContent.file(href);
+                        if (fileInZip) {
+                            const blobUrl = URL.createObjectURL(await fileInZip.async("blob"));
+                            imageMap[href] = blobUrl;
+                            imageMap[href.split('/').pop()] = blobUrl;
+                        }
+                    }
+                }
+
+                pagesArray = [];
+                chaptersToc = [];
+                const tocList = document.getElementById('toc-list');
+                tocList.innerHTML = '';
+                let chapterCounter = 1;
+
+                const extractBlocks = (root) => {
+                    const blocks = [];
+                    for (const node of Array.from(root.children)) {
+                        const tag = node.tagName.toLowerCase();
+                        if (['div', 'section', 'article', 'header', 'main'].includes(tag) && node.children.length > 0) {
+                            blocks.push(...extractBlocks(node));
+                        } else {
+                            blocks.push(node);
+                        }
+                    }
+                    return blocks;
+                };
+
+                for (const itemref of opfXml.querySelectorAll("spine > itemref")) {
+                    const href = itemById[itemref.getAttribute("idref")];
+                    if (!href) continue;
+                    const htmlFile = zipContent.file(opfDir + href) || zipContent.file(href);
+                    if (!htmlFile) continue;
+
+                    const doc = parser.parseFromString(await htmlFile.async("text"), "text/html");
+                    doc.querySelectorAll('img, image').forEach(imgEl => {
+                        const src = imgEl.getAttribute('src') || imgEl.getAttribute('xlink:href');
+                        const cleanSrc = src?.split('/').pop();
+                        if (cleanSrc && imageMap[cleanSrc]) imgEl.setAttribute('src', imageMap[cleanSrc]);
+                    });
+
+                    if (!doc.body.textContent.trim() && !doc.body.querySelector('img, svg')) continue;
+                    const chapterTitle = doc.querySelector('h1, h2, h3, title')?.textContent.trim() || `Section ${chapterCounter}`;
+
+                    if (step === 2 && pagesArray.length % 2 === 0) {
+                        pagesArray.push({ html: '<div class="page-blank">~</div>', chapterTitle });
+                    }
+
+                    chaptersToc.push({ title: chapterTitle, spreadIndex: Math.floor(pagesArray.length / step) });
+                    let currentPageHtml = '';
+                    const blocks = extractBlocks(doc.body);
+
+                    if (blocks.length === 0) {
+                        pagesArray.push({ html: doc.body.innerHTML, chapterTitle });
+                    } else {
+                        for (const el of blocks) {
+                            const elHtml = el.outerHTML;
+                            sandbox.innerHTML = currentPageHtml + elHtml;
+                            if (sandbox.scrollHeight > pageRefHeight) {
+                                if (currentPageHtml !== '') {
+                                    pagesArray.push({ html: currentPageHtml, chapterTitle });
+                                    currentPageHtml = '';
+                                }
+                                sandbox.innerHTML = elHtml;
+                                currentPageHtml = (sandbox.scrollHeight > pageRefHeight && !el.querySelector('img, svg'))
+                                    ? splitTextNodeIntoPages(sandbox, '', el, pageRefHeight, chapterTitle)
+                                    : elHtml;
+                            } else {
+                                currentPageHtml += elHtml;
+                            }
+                        }
+                        if (currentPageHtml.trim() !== '') {
+                            pagesArray.push({ html: currentPageHtml, chapterTitle });
+                        }
+                    }
+                    chapterCounter++;
+                }
+
+                if (pagesArray.length === 0) {
+                    pagesArray.push({ html: '<p class="text-crimson text-center">Ce grimoire semble vide.</p>', chapterTitle: 'Vide' });
+                }
+
+                chaptersToc.forEach(chap => {
+                    const btn = document.createElement('button');
+                    btn.className = "w-full text-left px-3 py-3 rounded-lg bg-leather/60 hover:bg-goldLeaf hover:text-leatherDark text-parchment font-lora text-xs border border-goldLeaf/30 transition-colors flex items-center justify-between";
+                    btn.innerHTML = `<span class="truncate">${escapeHtml(chap.title)}</span><i class="fa-solid fa-chevron-right text-[10px] opacity-70 ml-2"></i>`;
+                    btn.onclick = () => {
+                        currentSpreadIndex = chap.spreadIndex;
+                        renderSpread();
+                        toggleTocDrawer();
+                    };
+                    tocList.appendChild(btn);
+                });
+            } catch (err) {
+                console.error("Erreur de découpage des pages:", err);
+                pagesArray = [{ html: '<p class="text-crimson text-center">Erreur lors de la lecture du grimoire.</p>', chapterTitle: 'Erreur' }];
             }
         }
 
-        function launchEpubReader() {
-            const book = books.find(b => b.id === currentSelectedBookId);
+        async function renderSpread() {
+            const step = getPagesPerStep();
+            const totalSpreads = Math.ceil(pagesArray.length / step) || 1;
+            currentSpreadIndex = Math.max(0, Math.min(currentSpreadIndex, totalSpreads - 1));
+
+            const leftPageIndex = currentSpreadIndex * step;
+            const rightPageIndex = leftPageIndex + 1;
+            const leftPage = pagesArray[leftPageIndex];
+            const rightPage = pagesArray[rightPageIndex];
+
+            document.getElementById('page-left').innerHTML = leftPage ? leftPage.html : '';
+            document.getElementById('page-right').innerHTML = rightPage ? rightPage.html : '<div class="page-blank">Fin du grimoire</div>';
+            document.getElementById('reader-chapter-title').textContent = (step === 2 ? rightPage?.chapterTitle : null) || leftPage?.chapterTitle || "Chapitre";
+            document.getElementById('reader-progress').textContent = step === 2
+                ? `Pages ${leftPageIndex + 1}-${Math.min(rightPageIndex + 1, pagesArray.length)} / ${pagesArray.length}`
+                : `Page ${leftPageIndex + 1} / ${pagesArray.length}`;
+
+            const progressPercent = totalSpreads <= 1 ? 100 : Math.round(((currentSpreadIndex + 1) / totalSpreads) * 100);
+            document.getElementById('reader-chapter-remaining').textContent = `Avancement : ${progressPercent}%`;
+
+            const book = books.find(b => b.id === currentReadingBookId);
+            if (book) {
+                const isAtFullCompletion = progressPercent >= 100;
+                const wasAlreadyAtEndSpread = book.lastCompletedSpreadIndex === currentSpreadIndex && book.completionCount > 0;
+
+                book.savedSpreadIndex = currentSpreadIndex;
+                const todayStr = new Date().toISOString().split('T')[0];
+                if (progressPercent >= 2 && !book.startDate) {
+                    book.startDate = todayStr;
+                    showToast("Lecture démarrée ! Grimoire passé 'En cours'.");
+                }
+                if (isAtFullCompletion && !wasAlreadyAtEndSpread) {
+                    book.completionCount = (Number(book.completionCount) || 0) + 1;
+                    book.lastCompletedSpreadIndex = currentSpreadIndex;
+                    book.endDate = todayStr;
+                    if (book.isRereading) {
+                        book.isRereading = false;
+                        showToast(`Relecture terminée (${book.completionCount} lectures) !`);
+                    } else if (book.completionCount === 1) {
+                        showToast("Épopée achevée ! Ajouté aux livres terminés.");
+                    }
+                }
+                await autoSaveBook(book);
+            }
+        }
+
+        async function markCurrentBookCompleted() {
+            const book = books.find(b => b.id === currentReadingBookId);
             if (!book) return;
-            showToast(`Ouverture de "${book.title}"...`);
+            const todayStr = new Date().toISOString().split('T')[0];
+            book.completionCount = (Number(book.completionCount) || 0) + 1;
+            book.endDate = todayStr;
+            if (!book.startDate) book.startDate = todayStr;
+            book.isRereading = false;
+            await autoSaveBook(book);
+            showToast(`Marqué à 100% (${book.completionCount} lecture${book.completionCount > 1 ? 's' : ''}) !`);
+        }
+
+        function turnPage(direction) {
+            const step = getPagesPerStep();
+            const totalSpreads = Math.ceil(pagesArray.length / step);
+            if (currentSpreadIndex + direction >= 0 && currentSpreadIndex + direction < totalSpreads) {
+                currentSpreadIndex += direction;
+                renderSpread();
+            }
+        }
+
+        function closeReader() {
+            document.getElementById('reader-modal').classList.add('hidden');
+            currentReadingBookId = null;
+            renderLibrary();
+            renderTimeline();
+            showToast("Progression enregistrée automatiquement.");
         }
 
         function renderTimeline() {
             const container = document.getElementById('timeline-container');
             container.innerHTML = '';
-
             const finishedBooks = books.filter(b => b.endDate).sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
 
             if (finishedBooks.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-leather/40 p-8 rounded-2xl text-center border border-crimson/30 text-parchment/70 font-lora">
-                        Aucun grimoire achevé pour l'instant.
-                    </div>
-                `;
+                container.innerHTML = `<div class="bg-leather/40 p-8 rounded-2xl text-center border border-goldLeaf/30 text-parchment/70 font-lora">Aucun grimoire achevé pour le moment.</div>`;
                 return;
             }
 
             finishedBooks.forEach(book => {
                 const item = document.createElement('div');
-                item.className = 'relative flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-leather/90 p-5 rounded-2xl border border-crimson/40 shadow-xl';
-                
+                item.className = 'relative flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-leather/80 p-4 sm:p-5 rounded-2xl border border-goldLeaf/40 shadow-xl';
                 item.innerHTML = `
-                    <div class="absolute -left-[35px] sm:-left-[41px] w-6 h-6 rounded-full bg-crimson border-4 border-leatherDark shadow-md"></div>
-                    <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-16 h-24 object-cover rounded-xl border border-goldLeaf/40 shadow" onerror="this.src='https://placehold.co/100x150/4a2511/d4af37?text=Cover'">
-                    <div class="flex flex-col gap-1 flex-grow">
+                    <div class="absolute -left-[29px] md:-left-[41px] top-6 sm:top-auto w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-goldLeaf border-4 border-leatherDark shadow-md"></div>
+                    <img src="${book.cover}" alt="${escapeHtml(book.title)}" class="w-16 h-24 object-cover rounded-xl border border-goldLeaf/40 shadow flex-shrink-0" onerror="this.src='https://placehold.co/100x150/4a2511/d4af37?text=Cover'">
+                    <div class="flex flex-col gap-1 flex-grow min-w-0">
                         <div class="flex items-center justify-between flex-wrap gap-2">
-                            <h3 class="font-cinzel text-goldLeaf font-bold text-lg">${escapeHtml(book.title)}</h3>
-                            <span class="text-xs bg-red-950/60 text-goldLeaf px-3 py-1 rounded-full border border-goldLeaf/30 font-mono">
-                                <i class="fa-solid fa-gift mr-1"></i> Terminé le : ${book.endDate}
+                            <h3 class="font-cinzel text-goldLeaf font-bold text-base sm:text-lg">${escapeHtml(book.title)}</h3>
+                            <span class="text-xs bg-amber-900/40 text-goldLeaf px-3 py-1 rounded-full border border-goldLeaf/30 font-mono">
+                                <i class="fa-solid fa-flag-checkered mr-1"></i> Terminé le : ${book.endDate}
                             </span>
                         </div>
                         <p class="text-xs font-lora italic text-parchment/80">par ${escapeHtml(book.author)}</p>
-                        ${book.comment ? `<p class="text-xs text-parchment bg-black/40 p-3 rounded-xl border border-goldLeaf/20 mt-2 font-lora">"${escapeHtml(book.comment)}"</p>` : ''}
+                        ${book.comment ? `<p class="text-xs text-parchment bg-leatherDark/60 p-3 rounded-xl border border-goldLeaf/20 mt-2 font-lora">"${escapeHtml(book.comment)}"</p>` : ''}
                     </div>
                 `;
                 container.appendChild(item);
@@ -860,53 +2539,55 @@
         function populateFilters() {
             const genreSelect = document.getElementById('genre-filter');
             const sagaSelect = document.getElementById('saga-filter');
-
-            const rawGenres = books.map(b => b.genre).filter(Boolean);
             const genresSet = new Set();
-            rawGenres.forEach(g => {
+
+            books.map(b => b.genre).filter(Boolean).forEach(g => {
                 g.split(',').forEach(sub => {
                     const clean = sub.trim();
                     if (clean) genresSet.add(clean.charAt(0).toUpperCase() + clean.slice(1));
                 });
             });
-            const genres = [...genresSet].sort();
+
             const sagas = [...new Set(books.map(b => b.saga).filter(Boolean))].sort();
+            genreSelect.innerHTML = '<option value="">Genre</option>';
+            [...genresSet].sort().forEach(g => { genreSelect.innerHTML += `<option value="${g}">${g}</option>`; });
 
-            genreSelect.innerHTML = '<option value="">Tous les Genres</option>';
-            genres.forEach(g => {
-                genreSelect.innerHTML += `<option value="${g}">${g}</option>`;
-            });
-
-            sagaSelect.innerHTML = '<option value="">Toutes les Sagas</option>';
-            sagas.forEach(s => {
-                sagaSelect.innerHTML += `<option value="${s}">${s}</option>`;
-            });
+            sagaSelect.innerHTML = '<option value="">Saga</option>';
+            sagas.forEach(s => { sagaSelect.innerHTML += `<option value="${s}">${s}</option>`; });
         }
 
-        function filterBooks() {
-            renderLibrary();
-        }
+        const filterBooks = () => renderLibrary();
 
         function switchView(viewName) {
             const libView = document.getElementById('view-library');
             const timeView = document.getElementById('view-timeline');
+            const profView = document.getElementById('view-profile');
             const controls = document.getElementById('library-controls');
+            const manualHint = document.getElementById('manual-sort-hint');
             const btnLib = document.getElementById('btn-view-library');
             const btnTime = document.getElementById('btn-view-timeline');
+
+            const inactiveClass = "px-2.5 sm:px-3.5 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-[11px] sm:text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 hover:bg-leather/80 whitespace-nowrap flex-1 sm:flex-initial";
+            const activeClass = "px-2.5 sm:px-3.5 py-2 bg-goldLeaf text-leatherDark font-cinzel font-bold text-[11px] sm:text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 whitespace-nowrap flex-1 sm:flex-initial";
+
+            [libView, timeView, profView, controls, manualHint].forEach(el => { if (el) el.classList.add('hidden'); });
+            btnLib.className = inactiveClass;
+            btnTime.className = inactiveClass;
 
             if (viewName === 'library') {
                 libView.classList.remove('hidden');
                 controls.classList.remove('hidden');
-                timeView.classList.add('hidden');
-                btnLib.className = "px-4 py-2 bg-crimson text-parchment font-cinzel font-bold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 border border-goldLeaf/40";
-                btnTime.className = "px-4 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 hover:bg-leather/80";
-            } else {
-                libView.classList.add('hidden');
-                controls.classList.add('hidden');
+                if (manualHint && (userProfile.sortMode || document.getElementById('sort-select')?.value) === 'manual') {
+                    manualHint.classList.remove('hidden');
+                }
+                btnLib.className = activeClass;
+            } else if (viewName === 'timeline') {
                 timeView.classList.remove('hidden');
-                btnTime.className = "px-4 py-2 bg-crimson text-parchment font-cinzel font-bold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 border border-goldLeaf/40";
-                btnLib.className = "px-4 py-2 bg-leather text-goldLeaf border border-goldLeaf/40 font-cinzel font-semibold text-xs md:text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 hover:bg-leather/80";
+                btnTime.className = activeClass;
                 renderTimeline();
+            } else if (viewName === 'profile') {
+                profView.classList.remove('hidden');
+                renderProfilePage();
             }
         }
 
@@ -914,14 +2595,12 @@
             const toast = document.getElementById('toast');
             document.getElementById('toast-message').textContent = message;
             toast.classList.remove('translate-y-20', 'opacity-0');
-            setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0');
-            }, 3500);
+            setTimeout(() => { toast.classList.add('translate-y-20', 'opacity-0'); }, 3500);
         }
 
         function escapeHtml(text) {
             if (!text) return '';
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
     </script>
 </body>
