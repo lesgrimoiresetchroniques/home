@@ -1696,6 +1696,50 @@
         </div>
     </div>
 
+    <!-- MODAL FICHE DÉTAILLÉE D'UN LIVRE DU CATALOGUE -->
+    <div id="catalog-book-detail-modal" class="fixed inset-0 z-[75] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+        <div class="grimoire-page w-full max-w-2xl rounded-3xl p-5 sm:p-6 md:p-8 relative shadow-2xl border-2 border-goldLeaf my-auto max-h-[92dvh] overflow-y-auto no-scrollbar flex flex-col gap-4" style="background-image: var(--theme-pattern), linear-gradient(165deg, var(--theme-surface) 0%, var(--theme-dark) 100%); color: var(--theme-text);">
+            <button type="button" onclick="closeCatalogBookDetailModal()" aria-label="Fermer la fiche du livre" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-leatherDark text-goldLeaf hover:bg-crimson hover:text-white flex items-center justify-center transition-colors border border-goldLeaf/50 shadow-lg text-lg z-20">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex flex-col sm:flex-row gap-5 items-start pr-8">
+                <div class="w-28 sm:w-32 aspect-[2/3] rounded-2xl overflow-hidden border-2 border-goldLeaf/60 bg-leatherDark shadow-xl flex-shrink-0 cover-title-overlay">
+                    <img id="catalog-detail-cover" src="" alt="Couverture" class="w-full h-full object-cover" onerror="this.src='https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=400'">
+                </div>
+                <div class="flex flex-col gap-2 min-w-0 flex-grow">
+                    <div id="catalog-detail-genre-badge" class="inline-flex self-start px-2.5 py-0.5 bg-black/30 text-goldLeaf border border-goldLeaf/40 rounded-full text-[11px] font-semibold uppercase tracking-wider"></div>
+                    <h3 id="catalog-detail-title" class="text-xl sm:text-2xl font-cinzel font-bold text-goldLeaf leading-tight"></h3>
+                    <p id="catalog-detail-author" class="text-sm font-lora italic text-parchment/85"></p>
+                    <div class="bg-black/30 p-3 rounded-xl border border-goldLeaf/30 text-xs flex flex-col gap-1.5 mt-1">
+                        <div class="flex justify-between gap-2 border-b border-goldLeaf/15 pb-1">
+                            <span class="font-semibold text-goldLeaf/90">Saga :</span>
+                            <span id="catalog-detail-saga" class="text-parchment text-right"></span>
+                        </div>
+                        <div class="flex justify-between gap-2">
+                            <span class="font-semibold text-goldLeaf/90">ISBN :</span>
+                            <span id="catalog-detail-isbn" class="font-mono text-parchment text-right"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <span class="text-xs font-bold uppercase tracking-wider text-goldLeaf/85 font-cinzel flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-open"></i> Description
+                </span>
+                <div id="catalog-detail-description" class="text-xs sm:text-sm leading-relaxed text-parchment/90 bg-black/25 p-3.5 rounded-xl border border-goldLeaf/20 font-lora whitespace-pre-line"></div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-goldLeaf/25">
+                <button type="button" onclick="closeCatalogBookDetailModal()" class="px-4 py-2.5 rounded-xl bg-leather text-parchment/85 hover:text-parchment border border-goldLeaf/35 font-cinzel font-bold text-xs transition-colors">
+                    Fermer
+                </button>
+                <button type="button" id="catalog-detail-add-btn" class="px-5 py-2.5 rounded-xl font-cinzel font-bold text-xs transition-all flex items-center gap-1.5"></button>
+            </div>
+        </div>
+    </div>
+
     <div id="calc-sandbox" style="position: fixed; left: -9999px; top: 0; visibility: hidden; pointer-events: none; overflow: visible;"></div>
 
     <div id="toast" class="fixed bottom-5 right-4 sm:right-6 z-50 bg-leatherDark text-parchment px-4 sm:px-6 py-3 rounded-xl border border-goldLeaf shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 flex items-center gap-3 max-w-[90vw]">
@@ -4441,75 +4485,155 @@ applyPrivateToggleState();
         }
 
         async function openCatalogSearchModal() {
-            const prefill = document.getElementById('search-input')?.value.trim() || '';
-            const catInput = document.getElementById('catalog-search-input');
-            if (catInput) catInput.value = prefill;
-            document.getElementById('catalog-search-modal').classList.remove('hidden');
-            await runCatalogSearch();
-            if (catInput) catInput.focus();
-        }
+    const prefill = document.getElementById('search-input')?.value.trim() || '';
+    const catInput = document.getElementById('catalog-search-input');
+    const resultsEl = document.getElementById('catalog-search-results');
+    if (catInput) catInput.value = prefill;
+    catalogEntriesCache = [];
+    document.getElementById('catalog-search-modal').classList.remove('hidden');
+    if (prefill) {
+        await runCatalogSearch();
+    } else if (resultsEl) {
+        resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Saisissez un titre pour lancer la recherche.</p>`;
+    }
+    if (catInput) catInput.focus();
+}
 
-        async function runCatalogSearch() {
-            const resultsEl = document.getElementById('catalog-search-results');
-            if (!resultsEl || !currentUser) return;
-            const q = (document.getElementById('catalog-search-input')?.value || '').trim().toLowerCase();
-            resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Recherche dans le catalogue...</p>`;
+let catalogSearchSeq = 0;
 
-            let query = supabaseClient
-                .from('book_catalog')
-                .select('id, title, author, genre, saga, tome, isbn, cover, description')
-                .order('created_at', { ascending: false })
-                .limit(60);
+async function runCatalogSearch() {
+    const reqId = ++catalogSearchSeq;
+    const resultsEl = document.getElementById('catalog-search-results');
+    if (!resultsEl || !currentUser) return;
 
-            if (q) {
-                const safeQ = q.replace(/[%_,]/g, '');
-                if (safeQ) {
-                    query = query.or(`title.ilike.%${safeQ}%,author.ilike.%${safeQ}%,saga.ilike.%${safeQ}%,genre.ilike.%${safeQ}%`);
-                }
-            }
+    const q = (document.getElementById('catalog-search-input')?.value || '').trim();
+    catalogEntriesCache = [];
 
-            const { data, error } = await query;
-            if (error) {
-                resultsEl.innerHTML = `<p class="text-xs text-red-400 text-center py-6">Impossible de charger le catalogue (${escapeHtml(error.message)}).</p>`;
-                return;
-            }
+    if (!q) {
+        resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Saisissez un titre pour lancer la recherche.</p>`;
+        return;
+    }
 
-            catalogEntriesCache = data || [];
-            if (catalogEntriesCache.length === 0) {
-                resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Aucune fiche livre trouvée dans le catalogue.</p>`;
-                return;
-            }
+    resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Recherche en cours...</p>`;
 
-            resultsEl.innerHTML = '';
-            catalogEntriesCache.forEach(entry => {
-                const alreadyInLibrary = books.some(b =>
-                    (b.catalogBookId && b.catalogBookId === entry.id) ||
-                    (b.title.trim().toLowerCase() === (entry.title || '').trim().toLowerCase() &&
-                     b.author.trim().toLowerCase() === (entry.author || 'Auteur Inconnu').trim().toLowerCase())
-                );
+    const safeQ = q.replace(/[%_,()]/g, ' ').trim();
+    if (!safeQ) {
+        resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Saisissez un titre pour lancer la recherche.</p>`;
+        return;
+    }
 
-                const row = document.createElement('div');
-                row.className = 'flex items-center justify-between gap-3 bg-leather/70 p-3 rounded-2xl border border-goldLeaf/30';
-                row.innerHTML = `
-                    <div class="flex items-center gap-3 min-w-0">
-                        <img src="${escapeHtml(entry.cover || DEFAULT_COVER)}" alt="${escapeHtml(entry.title)}" class="w-12 h-16 object-cover rounded-lg border border-goldLeaf/40 flex-shrink-0" onerror="this.src='${DEFAULT_COVER}'">
-                        <div class="min-w-0">
-                            <p class="font-cinzel font-bold text-goldLeaf text-sm truncate">${escapeHtml(entry.title)}</p>
-                            <p class="font-lora italic text-parchment/80 text-xs truncate">par ${escapeHtml(entry.author || 'Auteur Inconnu')}</p>
-                            <p class="text-[11px] text-parchment/65 truncate">${escapeHtml([entry.genre, entry.saga ? `${entry.saga} T.${entry.tome || 1}` : ''].filter(Boolean).join(' • '))}</p>
-                        </div>
-                    </div>
-                    <button type="button" ${alreadyInLibrary ? 'disabled' : ''} onclick="addCatalogBookToMyLibrary('${entry.id}')" class="px-3.5 py-2 rounded-xl font-cinzel font-bold text-xs flex-shrink-0 transition-all ${
-                        alreadyInLibrary
-                            ? 'bg-leatherDark/70 text-parchment/50 border border-goldLeaf/20 cursor-default'
-                            : 'bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark shadow hover:opacity-95'
-                    }">
-                        ${alreadyInLibrary ? '<i class="fa-solid fa-check mr-1"></i> Dans ma bibliothèque' : '<i class="fa-solid fa-plus mr-1"></i> Ajouter'}
-                    </button>
-                `;
-                resultsEl.appendChild(row);
-            });
-        }
+    const { data, error } = await supabaseClient
+        .from('book_catalog')
+        .select('id, title, author, isbn, saga, tome')
+        .ilike('title', `%${safeQ}%`)
+        .limit(20);
+
+    // Si une recherche plus récente a été lancée ou si le champ a été vidé entre-temps, on ignore cette réponse
+    if (reqId !== catalogSearchSeq) return;
+    const currentQ = (document.getElementById('catalog-search-input')?.value || '').trim();
+    if (!currentQ) {
+        resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Saisissez un titre pour lancer la recherche.</p>`;
+        return;
+    }
+
+    if (error) {
+        resultsEl.innerHTML = `<p class="text-xs text-red-400 text-center py-6">Erreur catalogue : ${escapeHtml(error.message)}</p>`;
+        return;
+    }
+
+    catalogEntriesCache = data || [];
+    if (catalogEntriesCache.length === 0) {
+        resultsEl.innerHTML = `<p class="text-xs text-parchment/70 italic text-center py-6">Aucun résultat trouvé.</p>`;
+        return;
+    }
+
+    resultsEl.innerHTML = '';
+    catalogEntriesCache.forEach(entry => {
+        const alreadyInLibrary = books.some(b =>
+            (b.catalogBookId && b.catalogBookId === entry.id) ||
+            (b.title.trim().toLowerCase() === (entry.title || '').trim().toLowerCase() &&
+             b.author.trim().toLowerCase() === (entry.author || 'Auteur Inconnu').trim().toLowerCase())
+        );
+
+        const sagaLabel = entry.saga
+            ? `${entry.saga}${entry.tome ? ` — Tome ${entry.tome}` : ''}`
+            : 'Aucune saga';
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-3 bg-leather/70 hover:bg-leather/90 p-3 rounded-2xl border border-goldLeaf/30 transition-colors cursor-pointer';
+        row.onclick = () => openCatalogBookDetailModal(entry.id);
+        row.innerHTML = `
+            <div class="min-w-0 flex flex-col gap-0.5 flex-grow">
+                <p class="font-cinzel font-bold text-goldLeaf text-sm truncate">${escapeHtml(entry.title || 'Sans titre')}</p>
+                <p class="font-lora italic text-parchment/85 text-xs truncate">Auteur : ${escapeHtml(entry.author || 'Inconnu')}</p>
+                <p class="text-[11px] text-parchment/75 truncate">Saga : ${escapeHtml(sagaLabel)}</p>
+                <p class="text-[11px] font-mono text-parchment/65 truncate">ISBN : ${escapeHtml(entry.isbn || 'Non renseigné')}</p>
+            </div>
+            <button type="button" ${alreadyInLibrary ? 'disabled' : ''} onclick="event.stopPropagation(); addCatalogBookToMyLibrary('${entry.id}')" class="px-3.5 py-2 rounded-xl font-cinzel font-bold text-xs flex-shrink-0 transition-all ${
+                alreadyInLibrary
+                    ? 'bg-leatherDark/70 text-parchment/50 border border-goldLeaf/20 cursor-default'
+                    : 'bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark shadow hover:opacity-95'
+            }">
+                ${alreadyInLibrary ? '<i class="fa-solid fa-check mr-1"></i> Dans ma bibliothèque' : '<i class="fa-solid fa-plus mr-1"></i> Ajouter'}
+            </button>
+        `;
+        resultsEl.appendChild(row);
+    });
+}
+
+let currentCatalogDetailId = null;
+
+function isCatalogEntryInLibrary(entry) {
+    if (!entry) return false;
+    return books.some(b =>
+        (b.catalogBookId && String(b.catalogBookId) === String(entry.id)) ||
+        (b.title.trim().toLowerCase() === (entry.title || '').trim().toLowerCase() &&
+         b.author.trim().toLowerCase() === (entry.author || 'Auteur Inconnu').trim().toLowerCase())
+    );
+}
+
+function refreshCatalogDetailModalButton(entry) {
+    const addBtn = document.getElementById('catalog-detail-add-btn');
+    if (!addBtn || !entry) return;
+    const alreadyInLibrary = isCatalogEntryInLibrary(entry);
+    addBtn.disabled = alreadyInLibrary;
+    addBtn.className = `px-5 py-2.5 rounded-xl font-cinzel font-bold text-xs transition-all flex items-center gap-1.5 ${
+        alreadyInLibrary
+            ? 'bg-leatherDark/70 text-parchment/50 border border-goldLeaf/20 cursor-default'
+            : 'bg-gradient-to-r from-goldDark via-goldLeaf to-goldDark text-leatherDark shadow hover:opacity-95'
+    }`;
+    addBtn.innerHTML = alreadyInLibrary
+        ? '<i class="fa-solid fa-check mr-1"></i> Dans ma bibliothèque'
+        : '<i class="fa-solid fa-plus mr-1"></i> Ajouter à la bibliothèque';
+    addBtn.onclick = alreadyInLibrary ? null : () => addCatalogBookToMyLibrary(entry.id);
+}
+
+function openCatalogBookDetailModal(catalogId) {
+    const entry = catalogEntriesCache.find(item => String(item.id) === String(catalogId));
+    if (!entry) return;
+    currentCatalogDetailId = entry.id;
+
+    const sagaLabel = entry.saga
+        ? `${entry.saga}${entry.tome ? ` — Tome ${entry.tome}` : ''}`
+        : 'Aucune saga';
+
+    document.getElementById('catalog-detail-cover').src = entry.cover || DEFAULT_COVER;
+    document.getElementById('catalog-detail-genre-badge').textContent = entry.genre || 'Fantasy';
+    document.getElementById('catalog-detail-title').textContent = entry.title || 'Sans titre';
+    document.getElementById('catalog-detail-author').textContent = `par ${entry.author || 'Inconnu'}`;
+    document.getElementById('catalog-detail-saga').textContent = sagaLabel;
+    document.getElementById('catalog-detail-isbn').textContent = entry.isbn || 'Non renseigné';
+    document.getElementById('catalog-detail-description').textContent = entry.description || 'Aucune description fournie pour cet ouvrage.';
+
+    refreshCatalogDetailModalButton(entry);
+    document.getElementById('catalog-book-detail-modal').classList.remove('hidden');
+}
+
+function closeCatalogBookDetailModal() {
+    currentCatalogDetailId = null;
+    const m = document.getElementById('catalog-book-detail-modal');
+    if (m) m.classList.add('hidden');
+}
 
         async function addCatalogBookToMyLibrary(catalogId) {
             if (!currentUser) return;
@@ -4552,6 +4676,10 @@ applyPrivateToggleState();
             await renderLibrary();
             renderTimeline();
             await runCatalogSearch();
+            if (currentCatalogDetailId !== null && String(currentCatalogDetailId) === String(entry.id)) {
+                const refreshed = catalogEntriesCache.find(item => String(item.id) === String(entry.id)) || entry;
+                refreshCatalogDetailModalButton(refreshed);
+            }
             showToast(`"${entry.title}" ajouté à votre bibliothèque !`);
         }
 
