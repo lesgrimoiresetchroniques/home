@@ -3099,7 +3099,6 @@ applyPrivateToggleState();
             loadUserProfile();
             syncPrivateToggleFromCloud().catch(() => {});
             showAuthStatus("Authentification réussie ! Chargement de votre bibliothèque...", 'success');
-            await new Promise(resolve => setTimeout(resolve, 350));
 
             authScreen.classList.add('hidden');
             hideAuthStatus();
@@ -3246,7 +3245,8 @@ applyPrivateToggleState();
                 }
 
                 const localById = new Map(books.map(b => [b.id, b]));
-                const merged = [];
+                const remoteIds = new Set(remoteRows.map(r => r.id));
+                const toPutLocally = [];
                 const epubsToUpload = [];
 
                 for (const row of remoteRows) {
@@ -3280,7 +3280,7 @@ applyPrivateToggleState();
                         epubsToUpload.push(mergedBook);
                     }
 
-                    merged.push(mergedBook);
+                    toPutLocally.push(mergedBook);
                     localById.delete(row.id);
                 }
 
@@ -3296,28 +3296,35 @@ applyPrivateToggleState();
                     if (b.fileBlob && !b.epubPath) {
                         epubsToUpload.push(b);
                     }
-                    merged.push(b);
+                    toPutLocally.push(b);
                 }
 
                 for (let i = 0; i < epubsToUpload.length; i++) {
-                    const bookWithEpub = epubsToUpload[i];
-                    await uploadEpubBlobToCloud(bookWithEpub);
-                    if ((i + 1) % 3 === 0) {
-                        await sleep(BATCH_PAUSE_MS);
+                    await uploadEpubBlobToCloud(epubsToUpload[i]);
+                    if ((i + 1) % 5 === 0) {
+                        await sleep(50);
                     }
                 }
 
                 const booksToPush = [...localOnlyList, ...epubsToUpload];
-                for (let i = 0; i < booksToPush.length; i += SYNC_BATCH_SIZE) {
-                    const batch = booksToPush.slice(i, i + SYNC_BATCH_SIZE);
-                    await pushBookBatchToCloud(batch);
-                    await sleep(BATCH_PAUSE_MS);
+                for (let i = 0; i < booksToPush.length; i += 40) {
+                    await pushBookBatchToCloud(booksToPush.slice(i, i + 40));
+                    if (i + 40 < booksToPush.length) {
+                        await sleep(50);
+                    }
                 }
 
-                await db.books.where('userId').equals(currentUser.id).delete();
-                for (let i = 0; i < merged.length; i += SYNC_BATCH_SIZE) {
-                    await db.books.bulkPut(merged.slice(i, i + SYNC_BATCH_SIZE));
+                for (let i = 0; i < toPutLocally.length; i += 50) {
+                    await db.books.bulkPut(toPutLocally.slice(i, i + 50));
                 }
+
+                const staleIds = books
+                    .filter(b => !remoteIds.has(b.id) && !localById.has(b.id))
+                    .map(b => b.id);
+                if (staleIds.length > 0) {
+                    await db.books.bulkDelete(staleIds);
+                }
+
                 books = await db.books.where('userId').equals(currentUser.id).toArray();
 
                 renderAccountHeader();
@@ -3325,7 +3332,7 @@ applyPrivateToggleState();
                 populateFilters();
                 renderLibrary();
                 renderTimeline();
-                if (showFeedback) showToast("Bibliothèque et EPUB synchronisés par lots !");
+                if (showFeedback) showToast("Fiches livres synchronisées !");
             } finally {
                 isSyncing = false;
                 if (syncIcon) syncIcon.classList.remove('fa-spin');
