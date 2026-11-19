@@ -798,6 +798,35 @@
             transform: translateX(20px);
             background-color: var(--theme-dark, #22120a);
         }
+        @media (max-width: 639px) {
+    header .flex-nowrap.w-full.lg\:w-auto {
+        gap: 4px;
+        width: 100%;
+    }
+    header #btn-view-library,
+    header #btn-view-timeline,
+    header #btn-view-feed {
+        padding-left: 8px;
+        padding-right: 8px;
+        min-width: 0;
+        flex: 1 1 0;
+        font-size: 0;
+        gap: 0;
+    }
+    header #btn-view-library i,
+    header #btn-view-timeline i,
+    header #btn-view-feed i {
+        font-size: 13px;
+    }
+    header #sync-btn,
+    header button[onclick="toggleSpotifyDrawer()"],
+    header #header-account-btn {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        flex-shrink: 0;
+    }
+}
 
     </style>
 </head>
